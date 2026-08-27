@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- The config plugin enables/exports this only in the designated Hub app. -->
+    <service
+      android:name="expo.modules.modelcommonsnative.service.ModelCommonsService"
+      android:enabled="false"
+      android:exported="false"
+      android:stopWithTask="false">
+      <intent-filter>
+        <action android:name="org.modelcommons.action.BIND" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

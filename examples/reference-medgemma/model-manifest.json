@@ -1,0 +1,86 @@
+{
+  "schema": "modelcommons.model-manifest",
+  "schemaVersion": 1,
+  "protocolVersion": "0.1.0",
+  "id": "unsloth/medgemma-4b-it-gguf:q4-k-m",
+  "revision": "f98438176483313640920de5aec435f2d52bfc46",
+  "storageId": "medgemma-4b-it-q4-k-m-f98438176483",
+  "displayName": "MedGemma 4B IT (Q4_K_M)",
+  "family": "MedGemma",
+  "architecture": {
+    "type": "dense",
+    "parametersBillions": 4
+  },
+  "format": "gguf",
+  "quantization": "Q4_K_M",
+  "files": [
+    {
+      "role": "model",
+      "path": "model.gguf",
+      "required": true,
+      "sizeBytes": 2489894720,
+      "download": {
+        "url": "https://huggingface.co/unsloth/medgemma-4b-it-GGUF/resolve/f98438176483313640920de5aec435f2d52bfc46/medgemma-4b-it-Q4_K_M.gguf"
+      },
+      "integrity": {
+        "algorithm": "sha256",
+        "digest": "d842e8d2aca3fc5e613c5f9255e693768eeccae729e5c2653159eb79afe751f3"
+      }
+    },
+    {
+      "role": "mmproj",
+      "path": "mmproj.gguf",
+      "required": true,
+      "sizeBytes": 851252128,
+      "download": {
+        "url": "https://huggingface.co/unsloth/medgemma-4b-it-GGUF/resolve/f98438176483313640920de5aec435f2d52bfc46/mmproj-F16.gguf"
+      },
+      "integrity": {
+        "algorithm": "sha256",
+        "digest": "13913a7e70893b09c40154cbd43456611ea58f12bfe1e5d4ad5b7e4875644dc3"
+      }
+    }
+  ],
+  "source": {
+    "provider": "huggingface",
+    "repository": "unsloth/medgemma-4b-it-GGUF",
+    "revision": "f98438176483313640920de5aec435f2d52bfc46",
+    "modelCardUrl": "https://huggingface.co/unsloth/medgemma-4b-it-GGUF/tree/f98438176483313640920de5aec435f2d52bfc46"
+  },
+  "license": {
+    "id": "health-ai-developer-foundations",
+    "name": "Health AI Developer Foundations terms",
+    "url": "https://developers.google.com/health-ai-developer-foundations/medgemma",
+    "acceptanceRequired": true,
+    "gated": true,
+    "redistribution": "restricted"
+  },
+  "capabilities": [
+    "text",
+    "vision"
+  ],
+  "compatibleRuntimes": [
+    {
+      "id": "llama.rn",
+      "minimumVersion": "0.12.9"
+    }
+  ],
+  "context": {
+    "recommended": 2048,
+    "trained": 128000,
+    "maximum": 8192
+  },
+  "memory": {
+    "fileBytes": 3341146848,
+    "estimatedMinimumRamBytes": 5368709120,
+    "recommendedRamBytes": 8589934592,
+    "notes": [
+      "Reference estimate only; actual resident memory depends on context, backend, and OS pressure."
+    ]
+  },
+  "recommendedProfiles": [
+    "safe",
+    "balanced"
+  ]
+}
+

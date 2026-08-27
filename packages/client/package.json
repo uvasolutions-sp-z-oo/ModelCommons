@@ -1,0 +1,19 @@
+{
+  "name": "@modelcommons/client",
+  "version": "0.1.0",
+  "description": "Provider-neutral client and transport abstractions for ModelCommons.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@modelcommons/protocol": "0.1.0"
+  }
+}

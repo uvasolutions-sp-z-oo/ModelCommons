@@ -1,0 +1,43 @@
+{
+  "schema": "modelcommons.client-config",
+  "schemaVersion": 1,
+  "protocolVersion": "0.1.0",
+  "client": {
+    "id": "modelcommons.reference.medgemma",
+    "displayName": "MedGemma Reference"
+  },
+  "requirements": {
+    "capabilities": [
+      "text",
+      "vision"
+    ],
+    "formats": [
+      "gguf"
+    ],
+    "runtimes": [
+      "llama.rn"
+    ],
+    "minimumContext": 768
+  },
+  "selection": {
+    "preferredModelId": "unsloth/medgemma-4b-it-gguf:q4-k-m",
+    "fallback": "unavailable"
+  },
+  "aliases": {
+    "medgemma-reference": {
+      "modelId": "unsloth/medgemma-4b-it-gguf:q4-k-m",
+      "profile": "safe"
+    }
+  },
+  "inference": {
+    "profile": "safe",
+    "context": 768,
+    "maxOutput": 512
+  },
+  "access": {
+    "transports": [
+      "local-runtime"
+    ]
+  }
+}
+

@@ -1,0 +1,29 @@
+{
+  "name": "@modelcommons/runtime-llama-rn",
+  "version": "0.1.0",
+  "description": "Optional llama.rn runtime adapter for ModelCommons.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@modelcommons/protocol": "0.1.0"
+  },
+  "peerDependencies": {
+    "llama.rn": "0.12.9",
+    "react-native": ">=0.81.0 <0.82.0"
+  },
+  "peerDependenciesMeta": {
+    "llama.rn": {
+      "optional": true
+    }
+  }
+}

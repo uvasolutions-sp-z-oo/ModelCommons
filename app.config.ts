@@ -1,0 +1,72 @@
+import type { ConfigContext, ExpoConfig } from 'expo/config';
+
+export default ({ config }: ConfigContext): ExpoConfig => {
+  const appGroup = process.env.MODELCOMMONS_APP_GROUP?.trim();
+  return {
+    ...config,
+    name: 'ModelCommons',
+    slug: 'modelcommons',
+    description: 'Download once. Run locally. Use everywhere.',
+    version: '0.1.0',
+    orientation: 'portrait',
+    icon: './assets/images/icon.png',
+    scheme: 'modelcommons',
+    userInterfaceStyle: 'automatic',
+    newArchEnabled: true,
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: 'com.uvasolutions.modelcommons',
+      ...(appGroup ? {
+        entitlements: {
+          'com.apple.security.application-groups': [appGroup],
+        },
+      } : {}),
+    },
+    android: {
+      adaptiveIcon: {
+        backgroundColor: '#DDF1EF',
+        foregroundImage: './assets/images/icon.png',
+      },
+      edgeToEdgeEnabled: true,
+      predictiveBackGestureEnabled: false,
+      package: 'com.uvasolutions.modelcommons',
+      softwareKeyboardLayoutMode: 'resize',
+    },
+    web: {
+      output: 'static',
+      favicon: './assets/images/icon.png',
+    },
+    plugins: [
+      'expo-router',
+      'llama.rn',
+      [
+        './modules/model-commons-native/app.plugin.js',
+        {
+          androidHubService: true,
+          iosAppGroups: appGroup ? [appGroup] : [],
+          iosExposeDocumentsInFiles: true,
+        },
+      ],
+      [
+        'expo-splash-screen',
+        {
+          image: './assets/images/icon.png',
+          imageWidth: 180,
+          resizeMode: 'contain',
+          backgroundColor: '#F3F6F8',
+          dark: { backgroundColor: '#132238' },
+        },
+      ],
+    ],
+    experiments: {
+      typedRoutes: true,
+      reactCompiler: true,
+    },
+    extra: {
+      router: {},
+      modelCommons: {
+        appGroupConfigured: !!appGroup,
+      },
+    },
+  };
+};

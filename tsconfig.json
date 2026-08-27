@@ -1,0 +1,38 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@modelcommons/protocol": [
+        "./packages/protocol/src/index.ts"
+      ],
+      "@modelcommons/client": [
+        "./packages/client/src/index.ts"
+      ],
+      "@modelcommons/device-profile": [
+        "./packages/device-profile/src/index.ts"
+      ],
+      "@modelcommons/native": [
+        "./modules/model-commons-native/src/index.ts"
+      ],
+      "@modelcommons/provider-openai": [
+        "./packages/provider-openai/src/index.ts"
+      ],
+      "@modelcommons/provider-anthropic": [
+        "./packages/provider-anthropic/src/index.ts"
+      ],
+      "@modelcommons/runtime-llama-rn": [
+        "./packages/runtime-llama-rn/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
+}
