@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { NativeModules, Platform } from 'react-native';
+import { getDeviceProfile as getNativeDeviceProfile } from '@modelcommons/native';
 import { PROTOCOL_VERSION, type DeviceProfile } from '@modelcommons/protocol';
 
 interface NativeDeviceSnapshot {
@@ -10,14 +11,15 @@ interface NativeDeviceSnapshot {
 }
 
 async function nativeSnapshot(): Promise<NativeDeviceSnapshot> {
-  const native = NativeModules.ModelCommonsNative as
-    | { getDeviceProfile?: () => Promise<NativeDeviceSnapshot>; getDeviceInfo?: () => Promise<NativeDeviceSnapshot> }
-    | undefined;
-  if (native?.getDeviceProfile) {
-    try { return await native.getDeviceProfile(); } catch { return {}; }
-  }
-  if (native?.getDeviceInfo) {
-    try { return await native.getDeviceInfo(); } catch { return {}; }
+  // Expo Kotlin/Swift modules are resolved via Expo Modules Core. Looking up
+  // this module through React Native's NativeModules misses it in some
+  // new-architecture builds, including the constrained-device path.
+  try {
+    const native = await getNativeDeviceProfile();
+    if (Object.keys(native).length > 0) return native;
+  } catch {
+    // PlatformConstants remains the best-effort fallback when this app was
+    // opened in a build without the optional native module.
   }
   const constants = NativeModules.PlatformConstants?.getConstants?.() as
     | { TotalMemory?: number; totalMemory?: number }

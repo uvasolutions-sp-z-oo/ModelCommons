@@ -206,6 +206,20 @@ MedGemma is retained only as a reference configuration. Its use is governed by
 the Health AI Developer Foundations terms, and its outputs require appropriate
 validation for the intended use. No model weights are committed here.
 
+### Small test models
+
+The built-in catalog intentionally includes checksum-pinned, small GGUF text
+models so a contributor can exercise the real local path without first
+downloading a multi-gigabyte artifact. They are ordinary ModelCommons entries:
+the weights are downloaded separately, verified, and published through the
+same immutable store/registry/runtime path as every other model.
+
+The starter ladder is SmolLM2 135M (ultra-tiny infrastructure smoke test),
+SmolLM2 360M (recommended first local-chat test), and Qwen2.5 0.5B (small
+practical baseline). Catalog inclusion is not an endorsement, performance
+claim, or quality guarantee. Model weights remain outside the ModelCommons MIT
+license and each entry records its own upstream source and license.
+
 ## Repository guide
 
 - [`packages/protocol`](packages/protocol): implemented dependency-free protocol

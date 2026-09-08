@@ -105,7 +105,7 @@ export function selectCompatibleModel(
   const runtimeCompatible = contextCompatible
     .filter((entry) => matchingRuntime(entry, requirements.runtimeIds) !== undefined)
     .sort((a, b) => {
-      const experimentalOrder = Number(a.manifest.experimental) - Number(b.manifest.experimental);
+      const experimentalOrder = Number(a.manifest.experimental === true) - Number(b.manifest.experimental === true);
       if (experimentalOrder !== 0) return experimentalOrder;
       const aBytes = a.manifest.memory?.fileBytes ?? Number.MAX_SAFE_INTEGER;
       const bBytes = b.manifest.memory?.fileBytes ?? Number.MAX_SAFE_INTEGER;

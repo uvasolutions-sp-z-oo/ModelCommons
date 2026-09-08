@@ -73,6 +73,12 @@ const memory = vi.hoisted(() => {
 
 vi.mock('expo-file-system/legacy', () => memory.api);
 vi.mock('react-native', () => ({ NativeModules: {}, Platform: { OS: 'android' } }));
+vi.mock('@modelcommons/native', () => ({
+  hasNativeMethod: (name: string) => name === 'atomicReplaceFile',
+  atomicReplaceFile: (from: string, to: string) => memory.api.moveAsync({ from, to }),
+  publishAndroidHubState: vi.fn(),
+  sha256File: vi.fn(),
+}));
 
 import { ModelStore } from '../modelStore';
 

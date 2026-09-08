@@ -2,11 +2,26 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Platform, StyleSheet, Text, View } from 'react-native';
 import type { ModelManifest, ModelRegistryRecord } from '@modelcommons/protocol';
 import { ActionButton, Badge, Card, formatBytes, HubScreen, KeyValue, Muted, SectionTitle, palette } from '../../components/modelcommons/HubUI';
-import { MODEL_CATALOG } from '../../services/modelcommons/catalog';
+import {
+  getCatalogPresentation,
+  MODEL_CATALOG,
+  type CatalogPresentation,
+} from '../../services/modelcommons/catalog';
 import { modelStore, type ModelDownloadProgress } from '../../services/modelcommons/modelStore';
 import { useHubStore } from '../../store/inferenceStore';
 
-type DisplayModel = { manifest: ModelManifest; record?: ModelRegistryRecord };
+type DisplayModel = {
+  manifest: ModelManifest;
+  record?: ModelRegistryRecord;
+  presentation?: CatalogPresentation;
+};
+
+const TIER_ORDER: CatalogPresentation['tier'][] = ['starter', 'general', 'experimental'];
+const TIER_TITLES: Record<CatalogPresentation['tier'], string> = {
+  starter: 'Starter & smoke test',
+  general: 'General & reference',
+  experimental: 'Experimental',
+};
 
 export default function ModelsScreen() {
   const registry = useHubStore((state) => state.registry);
@@ -21,10 +36,26 @@ export default function ModelsScreen() {
   const operation = useRef<string | null>(null);
   const models = useMemo<DisplayModel[]>(() => {
     const byId = new Map<string, DisplayModel>();
-    for (const manifest of MODEL_CATALOG) byId.set(manifest.id, { manifest });
-    for (const record of registry.models) byId.set(record.manifest.id, { manifest: record.manifest, record });
-    return [...byId.values()];
+    for (const manifest of MODEL_CATALOG) {
+      byId.set(manifest.id, { manifest, presentation: getCatalogPresentation(manifest.id) });
+    }
+    for (const record of registry.models) {
+      byId.set(record.manifest.id, {
+        manifest: record.manifest,
+        record,
+        presentation: getCatalogPresentation(record.manifest.id),
+      });
+    }
+    return [...byId.values()].sort((left, right) => {
+      const leftOrder = left.presentation?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.presentation?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      return leftOrder - rightOrder || left.manifest.id.localeCompare(right.manifest.id);
+    });
   }, [registry]);
+  const groups = useMemo(() => TIER_ORDER.map((tier) => ({
+    tier,
+    models: models.filter((model) => (model.presentation?.tier ?? 'general') === tier),
+  })).filter((group) => group.models.length > 0), [models]);
 
   const sync = () => actions.setRegistry(modelStore.registry);
   const begin = (id: string, kind: 'license' | 'download' | 'delete'): boolean => {
@@ -114,7 +145,10 @@ export default function ModelsScreen() {
 
   return (
     <HubScreen title="Models" subtitle="Catalog metadata and installed immutable revisions. Downloads are explicit, resumable, and published only after verification.">
-      {models.map(({ manifest, record }) => {
+      {groups.map(({ tier, models: tierModels }) => (
+        <View key={tier} style={styles.group}>
+          <Text style={styles.tierTitle}>{TIER_TITLES[tier]}</Text>
+          {tierModels.map(({ manifest, record, presentation }) => {
         const accepted = modelStore.isLicenseAccepted(manifest);
         const ready = record?.state === 'READY';
         const busy = busyId === manifest.id;
@@ -126,8 +160,10 @@ export default function ModelsScreen() {
                 {record?.state ?? 'NOT_INSTALLED'}
               </Badge>
             </View>
+            {presentation?.summary ? <Muted>{presentation.summary}</Muted> : null}
             <Muted>{manifest.id}</Muted>
             <View style={styles.badges}>
+              {presentation?.badge ? <Badge tone={presentation.recommended ? 'success' : manifest.experimental ? 'warning' : 'neutral'}>{presentation.badge}</Badge> : null}
               <Badge>{manifest.architecture.type.toUpperCase()}</Badge>
               {manifest.quantization ? <Badge>{manifest.quantization}</Badge> : null}
               {manifest.capabilities.map((capability) => (
@@ -138,7 +174,10 @@ export default function ModelsScreen() {
             </View>
             <KeyValue label="Revision" value={manifest.revision.slice(0, 16)} />
             <KeyValue label="Artifact size" value={formatBytes(manifest.memory?.fileBytes)} />
+            {!manifest.license.acceptanceRequired ? <KeyValue label="License" value={`${manifest.license.id} · no acceptance required`} /> : null}
+            {manifest.license.acceptanceRequired ? (
             <KeyValue label="License" value={`${manifest.license.id}${accepted ? ' · accepted' : ' · acceptance required'}`} />
+            ) : null}
             <KeyValue label="Integrity" value={manifest.files.every((file) => !!file.integrity) ? 'SHA-256 required' : 'No checksum claim'} />
             {progress && busy ? <Text style={styles.progress}>{progress.phase === 'verifying' ? 'Verifying' : 'Downloading'} {progress.fileRole}: {progress.percent ?? '…'}{progress.percent === undefined ? '' : '%'} · {formatBytes(progress.bytesWritten)}</Text> : null}
             {!accepted ? <ActionButton label={Platform.OS === 'web' && reviewedLicenses.has(manifest.id) ? 'I reviewed the terms — accept' : 'Review and accept model license'} onPress={() => accept(manifest)} busy={busy && busyKind === 'license'} disabled={!!busyId && !busy} tone="secondary" /> : null}
@@ -155,7 +194,9 @@ export default function ModelsScreen() {
             ) : null}
           </Card>
         );
-      })}
+          })}
+        </View>
+      ))}
     </HubScreen>
   );
 }
@@ -163,6 +204,8 @@ export default function ModelsScreen() {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', justifyContent: 'space-between' },
   badges: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  group: { gap: 10 },
+  tierTitle: { color: palette.ink, fontSize: 14, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 4 },
   actions: { gap: 8 },
   progress: { color: palette.accent, fontSize: 13, fontWeight: '700' },
   experimental: { borderColor: '#E8C98D', backgroundColor: '#FFFCF5' },

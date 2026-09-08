@@ -77,6 +77,23 @@ license. Users must review and accept the applicable terms themselves. The
 reference does not assert redistribution rights, clinical suitability, or
 equivalence between a conversion and the original publisher artifact.
 
+The bundled starter metadata also points to separately downloaded Apache-2.0
+weights; none are included in this repository:
+
+- Hugging Face's original [SmolLM2 135M Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct)
+  and [SmolLM2 360M Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct)
+  models, distributed as GGUF conversions by
+  [Unsloth](https://huggingface.co/unsloth/SmolLM2-135M-Instruct-GGUF) and
+  [Unsloth](https://huggingface.co/unsloth/SmolLM2-360M-Instruct-GGUF),
+  respectively; and
+- Qwen's official [Qwen2.5 0.5B Instruct GGUF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF)
+  distribution.
+
+Catalog inclusion is not an endorsement, quality claim, or representation that
+these artifacts are suitable for a particular device or use. The pinned
+manifest, upstream source, and model license remain authoritative for each
+download.
+
 Model catalogs must record source repository, exact revision, license URL,
 gating, acceptance requirement, and integrity digest where available. A source
 code license never overrides model terms.

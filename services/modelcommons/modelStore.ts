@@ -1,5 +1,11 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import {
+  atomicReplaceFile as nativeAtomicReplaceFile,
+  hasNativeMethod,
+  publishAndroidHubState as nativePublishAndroidHubState,
+  sha256File as nativeSha256File,
+} from '@modelcommons/native';
 import {
   PROTOCOL_VERSION,
   ModelCommonsError,
@@ -270,11 +276,8 @@ async function atomicWriteJson(uri: string, value: unknown): Promise<void> {
   await FileSystem.deleteAsync(temporary, { idempotent: true });
   await FileSystem.writeAsStringAsync(temporary, JSON.stringify(value, null, 2));
   try {
-    const native = NativeModules.ModelCommonsNative as
-      | { atomicReplaceFile?: (stagedUri: string, destinationUri: string) => Promise<void> }
-      | undefined;
-    if (native?.atomicReplaceFile) {
-      await native.atomicReplaceFile(temporary, uri);
+    if (hasNativeMethod('atomicReplaceFile')) {
+      await nativeAtomicReplaceFile(temporary, uri);
       return;
     }
 
@@ -294,20 +297,16 @@ async function atomicWriteJson(uri: string, value: unknown): Promise<void> {
 }
 
 function nativeSha256(): ((uri: string) => Promise<string>) | undefined {
-  const module = NativeModules.ModelCommonsNative as
-    | { sha256File?: (uri: string) => Promise<string>; hashFileSha256?: (uri: string) => Promise<string> }
-    | undefined;
-  if (module?.sha256File) return (uri) => module.sha256File!(uri);
-  if (module?.hashFileSha256) return (uri) => module.hashFileSha256!(uri);
-  return undefined;
+  // Expo Kotlin/Swift modules are resolved through Expo Modules Core, not
+  // necessarily React Native's NativeModules object.  This must use the
+  // shared bridge so Android's registered streaming verifier is discoverable
+  // in new-architecture builds.
+  return hasNativeMethod('sha256File') ? nativeSha256File : undefined;
 }
 
 async function publishAndroidHubSnapshot(registry: ModelRegistry): Promise<void> {
   if (Platform.OS !== 'android') return;
-  const native = NativeModules.ModelCommonsNative as
-    | { publishAndroidHubState?: (modelsJson: string) => Promise<void> }
-    | undefined;
-  if (typeof native?.publishAndroidHubState !== 'function') return;
+  if (!hasNativeMethod('publishAndroidHubState')) return;
   const models = registry.models.map((record) => ({
     id: record.manifest.id,
     revision: record.manifest.revision,
@@ -326,7 +325,7 @@ async function publishAndroidHubSnapshot(registry: ModelRegistry): Promise<void>
     capabilities: record.manifest.capabilities.includes('text') ? ['text'] : [],
   }));
   try {
-    await native.publishAndroidHubState(JSON.stringify(models));
+    await nativePublishAndroidHubState(models);
   } catch {
     // The immutable registry remains authoritative. This auxiliary Binder
     // discovery snapshot is retried on every mutation and Hub initialization.

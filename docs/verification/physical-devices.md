@@ -26,6 +26,13 @@ native projects and can discard manual native changes; use it only in an
 intentional clean-generation verification flow. Passing static/unit checks is
 necessary but not a substitute for this matrix.
 
+`npm run android` first checks that llama.rn's arm64 native payload is present. If
+an install skipped llama.rn's lifecycle hook, the pre-build step runs the
+dependency's version-pinned, SHA-256-verifying artifact installer and aborts
+before Gradle if the bindings are still unavailable. A device already running
+an APK without those libraries needs a replacement native build; refreshing
+Metro JavaScript cannot add native libraries to an installed APK.
+
 ## Minimum device matrix
 
 Choose real devices available to the project and record their exact identifiers.
@@ -43,16 +50,30 @@ generalize one GPU/NPU result to all devices.
 
 ## Baseline model flow
 
-Run the checksum-pinned MedGemma 4B IT Q4_K_M catalog entry first. Vision adds an
-mmproj and image path, so certify text and vision separately. The current
-llama.rn adapter does not initialize mmproj; every vision case below is blocked
-until that runtime path is implemented, then must pass independently of text.
+Run the checksum-pinned SmolLM2 360M Instruct Q4_K_M starter entry first. It is
+the recommended initial physical-device smoke test and follows the same
+download, verification, registry, profile, and llama.rn path as larger models.
+It is a text-only infrastructure test, not a quality or device-support claim.
+After that flow, run MedGemma 4B IT Q4_K_M separately. Vision adds an mmproj and
+image path, so certify text and vision separately. The current llama.rn adapter
+does not initialize mmproj; every vision case below is blocked until that runtime
+path is implemented, then must pass independently of text.
+
+For the first Samsung Galaxy S22 test: select SmolLM2 360M, download and allow
+the SHA-256 check to complete, select it, choose Safe, then send `Reply with
+exactly: ModelCommons works offline.` Confirm generation; send a simple normal
+question and confirm streaming; cancel a generation; then leave the chat so its
+context is released. Record memory/thermal behavior and any crash, OOM, or
+cleanup failure. Repeat the same GGUF flow later on signed iOS hardware.
 
 - First launch with no store; registry/protocol creation and catalog display.
-- License review decline, then explicit acceptance; no download/load before it.
-  Prove acceptance is bound to model ID/revision plus license ID/URL, changed
-  identity requires acceptance again, and record the residual same-URL
-  terms-content/version gap.
+- For entries requiring acceptance (such as MedGemma), license review decline,
+  then explicit acceptance; no download/load before it. Prove acceptance is
+  bound to model ID/revision plus license ID/URL, changed identity requires
+  acceptance again, and record the residual same-URL terms-content/version
+  gap. Separately verify that the Apache-2.0 starter entries, which are not
+  gated and do not require interactive acceptance, can proceed directly to the
+  verified download.
 - Insufficient disk preflight.
 - Download start, progress, background/foreground, cancel, process kill, resume,
   network interruption, server/range mismatch, checksum mismatch, and retry.

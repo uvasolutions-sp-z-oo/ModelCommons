@@ -3,7 +3,6 @@ import React from 'react';
 import {
   ActivityIndicator,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +11,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const palette = {
   ink: '#132238',
@@ -35,7 +35,7 @@ export function HubScreen({
   refreshControl,
 }: PropsWithChildren<{ title: string; subtitle?: string; refreshControl?: ReactNode }>) {
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -125,7 +125,7 @@ export function formatBytes(bytes?: number): string {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.canvas, paddingTop: Platform.OS === 'android' ? 18 : 0 },
+  safe: { flex: 1, backgroundColor: palette.canvas },
   scroll: { flex: 1 },
   content: { padding: 18, paddingBottom: 48, gap: 14 },
   header: { marginBottom: 2 },
@@ -141,9 +141,12 @@ const styles = StyleSheet.create({
     gap: 10,
     ...(Platform.OS === 'web' ? { boxShadow: '0 3px 12px rgba(23, 43, 55, 0.07)' } : { elevation: 1 }),
   },
-  sectionTitle: { color: palette.ink, fontSize: 18, fontWeight: '700' },
+  // Section titles frequently share a row with a badge, switch, or count.
+  // Allow the title to wrap inside the available row width instead of pushing
+  // the trailing control beyond the card/viewport edge on narrow phones.
+  sectionTitle: { color: palette.ink, fontSize: 18, fontWeight: '700', flexShrink: 1 },
   muted: { color: palette.muted, fontSize: 13, lineHeight: 19 },
-  badge: { alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: '#E9EEF2' },
+  badge: { alignSelf: 'flex-start', maxWidth: '100%', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: '#E9EEF2' },
   badgeSuccess: { backgroundColor: palette.accentSoft },
   badgeWarning: { backgroundColor: palette.warningSoft },
   badgeDanger: { backgroundColor: palette.dangerSoft },

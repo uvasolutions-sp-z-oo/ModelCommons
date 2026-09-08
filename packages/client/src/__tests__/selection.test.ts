@@ -72,4 +72,22 @@ describe('selectCompatibleModel', () => {
 
     expect(result.runtimeId).toBe('runtime-b');
   });
+
+  it('orders automatic selection deterministically when stable manifests omit experimental', () => {
+    const small = {
+      ...manifest('local/small', ['text']),
+      memory: { fileBytes: 100 },
+    } satisfies ModelManifest;
+    const large = {
+      ...manifest('local/large', ['text']),
+      memory: { fileBytes: 200 },
+    } satisfies ModelManifest;
+    const models = [
+      { manifest: large, state: 'READY' as const, runtimeIds: ['runtime'] },
+      { manifest: small, state: 'READY' as const, runtimeIds: ['runtime'] },
+    ];
+
+    expect(selectCompatibleModel(models, { capabilities: ['text'] }).model.manifest.id).toBe('local/small');
+    expect(selectCompatibleModel([...models].reverse(), { capabilities: ['text'] }).model.manifest.id).toBe('local/small');
+  });
 });

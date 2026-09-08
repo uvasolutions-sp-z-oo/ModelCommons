@@ -109,8 +109,13 @@ export function selectHubTextRecord(
   }));
 
   try {
+    // `modelcommons:auto` is Hub UI state, not a portable client alias. Passing
+    // no ID asks the provider-neutral selector to rank every compatible READY
+    // model deterministically: non-experimental first, then smaller declared
+    // artifact size, then lexical model ID. Catalog/UI order is irrelevant.
+    const selectionId = requestedId === 'modelcommons:auto' ? undefined : requestedId;
     const selected = selectCompatibleModel(models, {
-      id: requestedId,
+      id: selectionId,
       capabilities: ['text'],
       profile: policy.profileId,
     }, registry.aliases);

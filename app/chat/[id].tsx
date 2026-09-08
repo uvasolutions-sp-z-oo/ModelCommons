@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import type { ModelCommonsMessage } from '@modelcommons/protocol';
 import { InputArea } from '../../components/InputArea';
@@ -86,7 +87,7 @@ export default function ChatScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={88}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.container}>
         <Stack.Screen options={{ title: session.title }} />
         <View style={styles.status}>
           <Badge tone="success">OFFLINE</Badge>

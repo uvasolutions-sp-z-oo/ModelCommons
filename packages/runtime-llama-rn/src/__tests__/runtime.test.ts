@@ -28,6 +28,23 @@ const request: ModelCommonsRequest = {
 };
 
 describe('LlamaRnRuntime lifecycle', () => {
+  it('reports a missing native binding without exposing native loader details', async () => {
+    const runtime = createLlamaRnRuntime({
+      loadModule: async () => ({
+        initLlama: async () => { throw new Error('dlopen failed: library "librnllama_jni.so" not found at /private/path'); },
+      } as never),
+    });
+
+    await expect(runtime.createSession({
+      model: { id: 'native-bindings', uri: 'file:///models/native-bindings.gguf' },
+      profile,
+    })).rejects.toMatchObject({
+      code: 'RUNTIME_UNAVAILABLE',
+      retryable: true,
+      message: 'llama.rn native bindings are unavailable in this build. Rebuild after installing llama.rn’s verified Android native artifacts.',
+    });
+  });
+
   it('clears shared state, stops native completion when iteration ends, and releases context before lease', async () => {
     const lifecycle: string[] = [];
     let signalCompletionStarted!: () => void;

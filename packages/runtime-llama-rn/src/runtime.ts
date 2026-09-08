@@ -56,6 +56,21 @@ function contextKey(options: CreateLlamaRnSessionOptions): string {
   });
 }
 
+/**
+ * llama.rn can be present in JavaScript while its separately published Android
+ * JNI archive was skipped at install time. Never surface its native error text:
+ * it can contain implementation paths, and this condition is recoverable by
+ * rebuilding with the verified artifact archive installed.
+ */
+function isNativeBindingFailure(error: unknown): boolean {
+  const message = error instanceof Error
+    ? error.message
+    : error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : '';
+  return /\b(?:jsi bindings not installed|unsatisfiedlinkerror|dlopen failed|librnllama_jni|failed to load native librar(?:y|ies))\b/i.test(message);
+}
+
 class ContextPool {
   private readonly lifecycleMutex = new AsyncMutex();
   private readonly entries = new Map<string, ContextEntry>();
@@ -145,12 +160,19 @@ class ContextPool {
         }
         if (error instanceof ModelCommonsError) throw error;
         const allocationFailure = error instanceof Error && /\b(?:oom|out of memory|alloc(?:ation)?|memory pressure)\b/i.test(error.message);
+        const nativeBindingsUnavailable = isNativeBindingFailure(error);
         throw new ModelCommonsError(
-          allocationFailure ? 'INSUFFICIENT_MEMORY' : 'RUNTIME_INITIALIZATION_FAILED',
+          allocationFailure
+            ? 'INSUFFICIENT_MEMORY'
+            : nativeBindingsUnavailable
+              ? 'RUNTIME_UNAVAILABLE'
+              : 'RUNTIME_INITIALIZATION_FAILED',
           allocationFailure
             ? 'llama.rn could not allocate enough memory for this model and profile.'
-            : 'llama.rn failed to initialize the selected model and profile.',
-          { cause: error }
+            : nativeBindingsUnavailable
+              ? 'llama.rn native bindings are unavailable in this build. Rebuild after installing llama.rn’s verified Android native artifacts.'
+              : 'llama.rn failed to initialize the selected model and profile.',
+          { cause: error, retryable: nativeBindingsUnavailable }
         );
       }
     });

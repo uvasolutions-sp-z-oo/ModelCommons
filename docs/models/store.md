@@ -118,6 +118,34 @@ anything. An incompatible marker fails with `PROTOCOL_VERSION_UNSUPPORTED`; the
 current process writes a marker only when none exists. Stored download and
 legacy-migration journals are shape/identity/path validated before use.
 
+## Adding a catalog model
+
+The static built-in catalog is intentionally small during pre-alpha, but a new
+entry must remain an ordinary `ModelManifest` consumed by the same store and
+runtime path. Do not add a model-specific downloader, filesystem path, runtime
+initializer, or committed model weight.
+
+Before adding an entry, independently record and review:
+
+- the actual distribution repository and a full immutable revision (never
+  `main`), with the exact artifact present at that revision;
+- exact artifact filename, positive byte size, and SHA-256 from that pinned
+  artifact;
+- upstream/original-model provenance separately from any GGUF conversion or
+  distribution publisher;
+- the applicable license URL, gating, acceptance requirement, and conservative
+  redistribution status;
+- only capabilities proven through the ModelCommons runtime/template path;
+- context evidence, including the distinction between trained context and any
+  lower artifact/runtime maximum; and
+- conservative RAM estimates with notes explaining that context, KV cache,
+  backend, buffers, and OS pressure affect resident memory.
+
+Hub-only labels, tiering, summaries, recommendation status, and sort order live
+beside the catalog in presentation metadata. They are not protocol manifest
+fields and do not influence automatic model selection. Add focused metadata and
+selection tests with every entry; network tests must not download model weights.
+
 ## Lifecycle and crash recovery
 
 The protocol states are `NOT_INSTALLED`, `DOWNLOADING`, `VERIFYING`, `READY`, and

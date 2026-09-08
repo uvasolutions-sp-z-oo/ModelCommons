@@ -8,6 +8,7 @@ import type {
   AndroidServiceInfo,
   AndroidSessionResult,
   AndroidStreamEvent,
+  ModelCommonsNativeModuleShape,
   NativeAvailability,
   NativeDeviceProfile,
   NativeLeaseDescriptor,
@@ -16,6 +17,17 @@ import type {
 } from './types';
 
 export * from './types';
+
+/**
+ * Reports whether an Expo Modules API method is present in this native build.
+ *
+ * Keep feature detection beside the Expo Modules API boundary.  Code using
+ * `NativeModules` cannot reliably see Expo Kotlin/Swift modules when the new
+ * architecture is enabled, even though `requireOptionalNativeModule` can.
+ */
+export function hasNativeMethod(name: keyof ModelCommonsNativeModuleShape): boolean {
+  return typeof NativeModule?.[name] === 'function';
+}
 
 const NATIVE_ERRORS = {
   availability: {
