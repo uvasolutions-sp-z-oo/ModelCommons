@@ -57,13 +57,17 @@ if (diagnostics.some((item) => item.category === ts.DiagnosticCategory.Error)) {
     const stage = path.join(temporary, manifest.name.replace('@', '').replace('/', '-'));
     fs.mkdirSync(stage);
     fs.cpSync(path.join(output, directory, 'src'), path.join(stage, 'dist'), { recursive: true });
-    fs.cpSync(path.join(source, 'src'), path.join(stage, 'src'), { recursive: true,
-      filter: (file) => !file.includes('__tests__') && !file.endsWith('.test.ts') });
+    fs.cpSync(path.join(source, 'src'), path.join(stage, 'src'), {
+      recursive: true,
+      filter: (file) => !file.includes('__tests__') && !file.endsWith('.test.ts')
+    });
     const native = manifest.name === '@modelcommons/native';
     if (native) {
       for (const item of ['android', 'ios', 'scripts', 'app.plugin.js', 'expo-module.config.json', 'ModelCommonsNative.podspec']) {
-        fs.cpSync(path.join(source, item), path.join(stage, item), { recursive: true,
-          filter: (file) => !file.split(path.sep).some((part) => ['build', '.cxx', '.gradle', 'test'].includes(part)) });
+        fs.cpSync(path.join(source, item), path.join(stage, item), {
+          recursive: true,
+          filter: (file) => !file.split(path.sep).some((part) => ['build', '.cxx', '.gradle', 'test'].includes(part))
+        });
       }
     }
     fs.copyFileSync(path.join(root, 'LICENSE'), path.join(stage, 'LICENSE'));
@@ -72,19 +76,68 @@ if (diagnostics.some((item) => item.category === ts.DiagnosticCategory.Error)) {
     for (const [key, value] of Object.entries(manifest.exports || { '.': './src/index.ts' })) {
       if (typeof value === 'string' && value.startsWith('./src/')) {
         const compiled = value.replace('./src/', './dist/').replace(/\.ts$/, '.js');
-        exports[key] = { types: compiled.replace(/\.js$/, '.d.ts'),
-          ...(native ? { 'react-native': value } : {}), default: compiled };
+        exports[key] = {
+          types: compiled.replace(/\.js$/, '.d.ts'),
+          ...(native ? { 'react-native': value } : {}), default: compiled
+        };
       } else exports[key] = value;
     }
-    const packed = { ...manifest, type: 'commonjs', main: './dist/index.js', types: './dist/index.d.ts',
-      exports, files: ['dist', 'src', 'LICENSE', 'README.md', ...(native ? ['android', 'ios', 'scripts', 'app.plugin.js', 'expo-module.config.json', 'ModelCommonsNative.podspec'] : [])] };
+    const packed = {
+      ...manifest, type: 'commonjs', main: './dist/index.js', types: './dist/index.d.ts',
+      exports, files: ['dist', 'src', 'LICENSE', 'README.md', ...(native ? ['android', 'ios', 'scripts', 'app.plugin.js', 'expo-module.config.json', 'ModelCommonsNative.podspec'] : [])]
+    };
     fs.writeFileSync(path.join(stage, 'package.json'), JSON.stringify(packed, null, 2) + '\n');
     const npmCli = process.env.npm_execpath;
     if (!npmCli || !fs.existsSync(npmCli)) throw new Error('Run this script with npm run packages:pack-local -- <destination>.');
     const packedOutput = execFileSync(process.execPath, [npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', destination],
       { cwd: stage, encoding: 'utf8' });
-    const record = JSON.parse(packedOutput)[0];
+    const parsedPackOutput = JSON.parse(packedOutput);
+
+    // Older npm: an array of package records.
+    // npm 12: an object keyed by package name.
+    // Normalize both formats, then validate the expected single package.
+    const packRecords = Array.isArray(parsedPackOutput)
+      ? parsedPackOutput
+      : parsedPackOutput !== null && typeof parsedPackOutput === 'object'
+        ? Object.values(parsedPackOutput)
+        : [];
+
+    if (packRecords.length !== 1) {
+      throw new Error(
+        `Expected exactly one npm pack result for ${manifest.name}, ` +
+        `received ${packRecords.length}. ` +
+        `Output: ${packedOutput.slice(0, 2000)}`
+      );
+    }
+
+    const record = packRecords[0];
+
+    if (
+      !record ||
+      typeof record !== 'object' ||
+      record.name !== manifest.name ||
+      record.version !== manifest.version ||
+      typeof record.filename !== 'string' ||
+      !record.filename.endsWith('.tgz') ||
+      /[\\/:\u0000-\u001f]/.test(record.filename)
+    ) {
+      throw new Error(
+        `Invalid npm pack result for ${manifest.name}@${manifest.version}. ` +
+        `Output: ${packedOutput.slice(0, 2000)}`
+      );
+    }
+
     const artifact = path.join(destination, record.filename);
+
+    if (!fs.existsSync(artifact)) {
+      throw new Error(`npm pack reported an archive that does not exist: ${artifact}`);
+    }
+
+    const artifactInfo = fs.lstatSync(artifact);
+
+    if (!artifactInfo.isFile() || artifactInfo.size === 0) {
+      throw new Error(`npm pack did not produce a non-empty regular file: ${artifact}`);
+    }
     const sourceHash = crypto.createHash('sha256');
     const sourceInputs = [];
     function collect(directory) {
@@ -101,8 +154,10 @@ if (diagnostics.some((item) => item.category === ts.DiagnosticCategory.Error)) {
     for (const file of sourceInputs.sort()) {
       sourceHash.update(path.relative(stage, file).split(path.sep).join('/') + '\0').update(fs.readFileSync(file));
     }
-    provenance.packages.push({ name: manifest.name, version: manifest.version, filename: record.filename,
-      sha256: crypto.createHash('sha256').update(fs.readFileSync(artifact)).digest('hex'), sourceSha256: sourceHash.digest('hex') });
+    provenance.packages.push({
+      name: manifest.name, version: manifest.version, filename: record.filename,
+      sha256: crypto.createHash('sha256').update(fs.readFileSync(artifact)).digest('hex'), sourceSha256: sourceHash.digest('hex')
+    });
   }
   fs.writeFileSync(path.join(destination, 'provenance.json'), JSON.stringify(provenance, null, 2) + '\n');
   process.stdout.write(`Packed ${packages.length} packages into ${destination}\nTemporary build retained for inspection: ${temporary}\n`);
