@@ -354,3 +354,5 @@ export async function sha256File(uri: string): Promise<string> {
     NATIVE_ERRORS.hashFile
   );
 }
+export { createPrivateStorePort } from './privateStore';
+export { createSharedStorePort } from './sharedStore';

@@ -1,0 +1,17 @@
+{
+  "name": "@modelcommons/model-store",
+  "version": "0.1.0",
+  "description": "Verified model storage with injected I/O and trust policy.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./registry": "./src/registry.ts",
+    "./catalog": "./src/catalog.ts"
+  },
+  "files": ["src"],
+  "sideEffects": false,
+  "dependencies": { "@modelcommons/protocol": "0.1.0" }
+}

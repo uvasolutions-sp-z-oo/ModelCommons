@@ -28,6 +28,51 @@ const request: ModelCommonsRequest = {
 };
 
 describe('LlamaRnRuntime lifecycle', () => {
+  it('budgets rendered instructions and output before native generation without trimming', async () => {
+    const context = {
+      gpu: false, devices: [], reasonNoGPU: 'CPU profile',
+      model: { desc: 'synthetic budget model', size: 1, nParams: 1, is_recurrent: false, is_hybrid: false,
+        chatTemplates: { llamaChat: false, jinja: { default: true,
+          defaultCaps: { tools: false, toolCalls: false, systemRole: true, parallelToolCalls: false }, toolUse: false } } },
+      isJinjaSupported: () => true, isLlamaChatSupported: () => false,
+      getFormattedChat: vi.fn(async (messages: unknown) => ({ prompt: JSON.stringify(messages) })),
+      tokenize: vi.fn(async () => ({ tokens: Array(2000).fill(1) })),
+      clearCache: vi.fn(async () => undefined), completion: vi.fn(),
+      stopCompletion: vi.fn(async () => undefined), release: vi.fn(async () => undefined),
+    };
+    const runtime = createLlamaRnRuntime({ loadModule: async () => ({ initLlama: async () => context } as never) });
+    const session = await runtime.createSession({ model: { id: 'budget', uri: 'file:///synthetic/model.gguf' }, profile, enforceContextBudget: true });
+    await expect(session.complete({ ...request, instructions: 'Do not remove these safety instructions.', maxOutputTokens: 128 }))
+      .rejects.toMatchObject({ code: 'CAPABILITY_UNAVAILABLE' });
+    expect(context.getFormattedChat.mock.calls[0][0]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'system', content: 'Do not remove these safety instructions.' }),
+    ]));
+    expect(context.completion).not.toHaveBeenCalled();
+    await session.release(); await runtime.release();
+  });
+
+  it.each([false, true])('clears independent session state including recurrent=%s before every request', async (recurrent) => {
+    const context = {
+      gpu: false, devices: [], reasonNoGPU: 'CPU profile',
+      model: { desc: 'synthetic state model', size: 1, nParams: 1, is_recurrent: recurrent, is_hybrid: false,
+        chatTemplates: { llamaChat: false, jinja: { default: true,
+          defaultCaps: { tools: false, toolCalls: false, systemRole: true, parallelToolCalls: false }, toolUse: false } } },
+      isJinjaSupported: () => true, isLlamaChatSupported: () => false,
+      clearCache: vi.fn(async () => undefined),
+      completion: vi.fn(async () => ({ text: 'Synthetic answer', content: 'Synthetic answer', reasoning_content: '', tool_calls: [],
+        chat_format: 0, tokens_predicted: 2, tokens_evaluated: 4, tokens_cached: 0, stopped_eos: true, stopped_limit: false,
+        stopped_word: false, stopping_word: '', interrupted: false, timings: {} })),
+      stopCompletion: vi.fn(async () => undefined), release: vi.fn(async () => undefined),
+    };
+    const runtime = createLlamaRnRuntime({ loadModule: async () => ({ initLlama: async () => context } as never) });
+    const first = await runtime.createSession({ model: { id: 'state', uri: 'file:///synthetic/state.gguf' }, profile });
+    const second = await runtime.createSession({ model: { id: 'state', uri: 'file:///synthetic/state.gguf' }, profile });
+    await first.complete({ ...request, instructions: 'Synthetic account A' });
+    await second.complete({ ...request, instructions: 'Synthetic account B' });
+    expect(context.clearCache.mock.calls).toEqual([[recurrent], [recurrent]]);
+    await first.release(); await second.release(); await runtime.release();
+  });
+
   it('reports a missing native binding without exposing native loader details', async () => {
     const runtime = createLlamaRnRuntime({
       loadModule: async () => ({

@@ -3,6 +3,9 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
+      "@modelcommons/model-store": ["./packages/model-store/src/index.ts"],
+      "@modelcommons/model-store/*": ["./packages/model-store/src/*"],
+      "@modelcommons/embedded": ["./packages/embedded/src/index.ts"],
       "@/*": [
         "./*"
       ],

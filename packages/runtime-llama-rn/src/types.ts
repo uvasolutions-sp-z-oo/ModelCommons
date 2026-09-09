@@ -31,6 +31,7 @@ export interface LlamaRnModelSource {
 export interface CreateLlamaRnSessionOptions {
   model: LlamaRnModelSource;
   profile: RuntimeProfile;
+  enforceContextBudget?: boolean;
 }
 
 export interface LlamaRnAvailability {

@@ -279,6 +279,8 @@ class Session implements LlamaRnSession {
   private releaseAttempt?: Promise<void>;
   private readonly operations = new Map<string, AbortController>();
   private readonly jobs = new Set<Promise<void>>();
+  private readonly contextSize: number;
+  private readonly enforceContextBudget: boolean;
 
   constructor(
     private readonly pool: ContextPool,
@@ -288,6 +290,8 @@ class Session implements LlamaRnSession {
   ) {
     this.modelId = options.model.id;
     this.profileId = options.profile.id;
+    this.contextSize = options.profile.llama.nCtx;
+    this.enforceContextBudget = options.enforceContextBudget === true;
   }
 
   getCapabilities(): LlamaRnReportedCapabilities {
@@ -400,6 +404,20 @@ class Session implements LlamaRnSession {
         let streamedContent = '';
         try {
           const params = completionParams(request, this.entry.capabilities);
+          if (this.enforceContextBudget) {
+            // Include the actual rendered chat template, instructions and output
+            // reserve. Never trim business evidence to fit the context.
+            const formatted = params.messages
+              ? await this.entry.context.getFormattedChat(params.messages, params.chat_template, {
+                jinja: params.jinja, tools: params.tools, response_format: params.response_format,
+                add_generation_prompt: params.add_generation_prompt,
+              })
+              : { prompt: params.prompt ?? '' };
+            const tokenized = await this.entry.context.tokenize(formatted.prompt ?? '');
+            if (tokenized.tokens.length + (request.maxOutputTokens ?? 128) + 8 > this.contextSize) {
+              throw new ModelCommonsError('CAPABILITY_UNAVAILABLE', 'The complete prompt and output reserve exceed the model context.');
+            }
+          }
           // Canonical requests carry their complete history. Reset native KV/recurrent
           // state so a context shared by multiple sessions cannot leak prior prompts.
           await this.entry.context.clearCache(
@@ -420,6 +438,7 @@ class Session implements LlamaRnSession {
             }
             if (delta) queue.push({ type: 'text.delta', responseId, delta });
           });
+          if (controller.signal.aborted) throw new ModelCommonsError('USER_CANCELLED', 'Generation cancelled.');
           this.emitResult(responseId, result, diagnostics, queue);
         } finally {
           controller.signal.removeEventListener('abort', stopNative);

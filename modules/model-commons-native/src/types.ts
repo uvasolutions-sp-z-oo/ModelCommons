@@ -87,6 +87,9 @@ export interface AndroidHubModelSnapshot {
 }
 
 export interface ModelCommonsNativeModuleShape {
+  privateModelOperation?(operation: string, path: string, value: string): Promise<unknown>;
+  downloadPrivateModel?(id: string, source: string, path: string, expected: number, origins: string[]): Promise<void>;
+  importPrivateModel?(id: string, path: string, expected: number): Promise<void>;
   getAvailability(): Promise<NativeAvailability>;
   getDeviceProfile(): Promise<NativeDeviceProfile>;
   atomicReplaceFile(stagedUri: string, destinationUri: string): Promise<void>;
@@ -98,6 +101,8 @@ export interface ModelCommonsNativeModuleShape {
   acquireModelLease?(connectionId: string, relativePath: string): Promise<NativeLeaseDescriptor>;
   releaseModelLease?(leaseId: string): Promise<void>;
   sha256Lease?(leaseId: string): Promise<string>;
+  readLeaseMetadata?(leaseId: string): Promise<string>;
+  statLease?(leaseId: string): Promise<{ size: number; regular: boolean }>;
 
   connectAndroidHub?(packageName: string): Promise<AndroidServiceInfo>;
   disconnectAndroidHub?(): Promise<void>;

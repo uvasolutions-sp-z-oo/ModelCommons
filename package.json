@@ -13,6 +13,8 @@
   ],
   "scripts": {
     "start": "expo start",
+    "packages:pack-local": "node scripts/pack-local-packages.cjs",
+    "eas-build-post-install": "node modules/model-commons-native/scripts/ensure-llama-payload.cjs",
     "android": "expo run:android",
     "preandroid": "node scripts/ensure-llama-rn-native.cjs",
     "android:prepare-native": "node scripts/ensure-llama-rn-native.cjs",
@@ -28,6 +30,8 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@modelcommons/client": "0.1.0",
+    "@modelcommons/model-store": "0.1.0",
+    "@modelcommons/embedded": "0.1.0",
     "@modelcommons/device-profile": "0.1.0",
     "@modelcommons/native": "0.1.0",
     "@modelcommons/protocol": "0.1.0",

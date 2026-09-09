@@ -8,12 +8,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./app.plugin.js": "./app.plugin.js",
+    "./scripts/ensure-llama-payload.cjs": "./scripts/ensure-llama-payload.cjs",
     "./package.json": "./package.json"
   },
   "files": [
     "android",
     "ios",
     "src",
+    "scripts",
     "app.plugin.js",
     "expo-module.config.json",
     "ModelCommonsNative.podspec",
@@ -26,6 +28,7 @@
   },
   "dependencies": {
     "@expo/config-plugins": "^54.0.0",
-    "@modelcommons/protocol": "0.1.0"
+    "@modelcommons/protocol": "0.1.0",
+    "@modelcommons/model-store": "0.1.0"
   }
 }

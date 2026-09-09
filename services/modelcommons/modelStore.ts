@@ -579,6 +579,9 @@ export class ModelStore {
   async delete(modelId: string): Promise<ModelRegistry> {
     return this.#exclusive(async () => {
       await this.initialize();
+      if (Platform.OS === 'ios') {
+        throw new ModelCommonsError('FEATURE_UNSUPPORTED', 'Shared iOS model deletion is deferred until every consuming app has released its file. This Hub cannot revoke another app\'s live mmap.');
+      }
       const record = this.#registry.models.find((entry) => entry.manifest.id === modelId);
       if (!record) return this.#registry;
       await this.#beforeDelete?.(modelId);

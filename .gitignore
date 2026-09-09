@@ -22,6 +22,7 @@ modules/*/ios/build/
 
 # Test and publication output
 coverage/
+.modelcommons-pack-*/
 compliance/sbom/
 
 # Local configuration and credentials
