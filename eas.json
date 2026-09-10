@@ -15,10 +15,7 @@
     },
     "production": {
       "autoIncrement": true,
-      "environment": "production",
-      "env": {
-        "MODELCOMMONS_PRODUCTION_BUILD": "1"
-      }
+      "environment": "production"
     }
   },
   "submit": {

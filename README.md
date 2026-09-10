@@ -193,33 +193,36 @@ MedGemma, medical prompts, medical guardrails, or Tatru branding.
 The Hub also provides an explicit **Report output** action on every completed,
 persisted assistant response. It previews and sends only that selected response,
 a required safety category, an optional note, and model/app/runtime metadata to
-Uva Solutions after final confirmation. It never sends the prompt, surrounding
-conversation, chat/session identity, diagnostics, or device identity, and never
-queues a failed report. See [PRIVACY.md](PRIVACY.md).
+the configured operator-controlled receiver after final confirmation. It never
+sends the prompt, surrounding conversation, chat/session identity, diagnostics,
+or device identity, and never queues a failed report. See [PRIVACY.md](PRIVACY.md).
 
-Production builds require `MODELCOMMONS_REPORT_URL` to be an HTTPS receiver and
-fail configuration when it is absent or invalid. The value is public build
-configuration, not a credential. Configure it in the EAS `production`
-environment as:
+`MODELCOMMONS_REPORT_URL` is optional public build configuration, not a
+credential. When configured, Expo validates it and exposes it as
+`extra.modelCommons.reportUrl`; HTTPS is required except for `localhost`,
+`127.0.0.1`, and Android-emulator `10.0.2.2` loopback development receivers.
+Operators can provide their own receiver through an EAS environment or other
+build environment, for example:
 
 ```text
-MODELCOMMONS_REPORT_URL=https://uva.solutions/index.php?option=com_uvaleads&task=report.submit&format=json
+MODELCOMMONS_REPORT_URL=https://reports.example.org/modelcommons
 ```
 
-After the receiver passes its production smoke test, set and verify the public
-value in the EAS project (quote the URL so the shell does not interpret `&`):
+The official deployment keeps its receiver URL in the EAS `production`
+environment rather than this repository. An operator can set and verify its own
+public value with EAS, for example:
 
 ```sh
-eas env:set --name MODELCOMMONS_REPORT_URL --value "https://uva.solutions/index.php?option=com_uvaleads&task=report.submit&format=json" --environment production --visibility plaintext
+eas env:set --name MODELCOMMONS_REPORT_URL --value "https://reports.example.org/modelcommons" --environment production --visibility plaintext
 eas env:list --environment production
 ```
 
-An absent endpoint is allowed for local development; the report form then says
-that reporting is unavailable in that build. Loopback HTTP is allowed only for
-local development. `eas.json` binds the production profile to the EAS
-`production` environment and sets `MODELCOMMONS_PRODUCTION_BUILD=1`, which
-activates the required HTTPS check. Non-EAS release automation must set the same
-marker.
+When the variable is absent or blank, Expo config still resolves, `reportUrl` is
+omitted, and the report form neutrally explains that diagnostic reporting is not
+configured. Production and community builds remain fully functional without a
+receiver; model storage, verification, inference, and platform sharing are
+unaffected. There is no fallback reporting endpoint. A configured malformed or
+disallowed URL still fails Expo configuration.
 
 On first run, and whenever the acknowledgement-policy version changes, the Hub
 gates access with an adult-use notice. Confirmation stores only a boolean, the
@@ -279,9 +282,10 @@ license and each entry records its own upstream source and license.
   and Anthropic-shaped examples, each labeled with its current execution status.
 - [`docs`](docs): architecture, compatibility, platform security, model store,
   memory, migration, integrations, research, and verification.
-- [`.env.example`](.env.example): optional `MODELCOMMONS_APP_GROUP` and required
-  production `MODELCOMMONS_REPORT_URL` build-time configuration; no entitlement
-  identifier, credential, or report token is hardcoded.
+- [`.env.example`](.env.example): optional `MODELCOMMONS_APP_GROUP` and optional
+  operator-controlled `MODELCOMMONS_REPORT_URL` build-time configuration; no
+  entitlement identifier, credential, deployment receiver, or report token is
+  hardcoded.
 - `app`, `components`, and `store`: generic Hub UI/state rebuilt from the donor
   shell; chat content is memory-only. MedGemma remains confined to catalog,
   migration, tests, and the reference example.

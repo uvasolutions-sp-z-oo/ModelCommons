@@ -142,6 +142,10 @@ track. Use only synthetic model output and notes:
 - Instrument normal chat usage without opening Send report. Confirm zero report
   receiver requests, including generation, cancellation, navigation, background,
   restart, and ordinary diagnostic logging.
+- Evaluate and install a separate build with `MODELCOMMONS_REPORT_URL` absent.
+  Confirm configuration succeeds, the form says diagnostic reporting is not
+  configured, Send remains disabled, no fallback request occurs, and model
+  download, verification, inference, and platform sharing remain functional.
 - Inspect logs/crash capture for the synthetic response and note. Confirm neither
   appears, raw server responses are not printed, and the reporting module never
   calls `diagnosticLogger`.

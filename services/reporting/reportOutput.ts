@@ -90,7 +90,7 @@ export async function submitReportOutput(
 ): Promise<ReportReceipt> {
   const url = options.url ?? configuredReportUrl();
   if (!url) {
-    throw new ReportTransportError('UNAVAILABLE', 'Reporting is unavailable in this build.');
+    throw new ReportTransportError('UNAVAILABLE', 'Diagnostic reporting is not configured in this build.');
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);

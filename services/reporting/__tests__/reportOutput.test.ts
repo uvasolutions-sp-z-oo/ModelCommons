@@ -8,6 +8,7 @@ vi.mock('expo-modules-core', () => ({ uuid: { v4: () => '69c90ba4-7f26-421f-a493
 
 import {
   ReportTransportError,
+  configuredReportUrl,
   createReportId,
   parseReportReceipt,
   submitReportOutput,
@@ -76,7 +77,13 @@ describe('report output transport', () => {
   });
 
   it('is unavailable without a configured endpoint', async () => {
-    await expect(submitReportOutput(payload)).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    expect(configuredReportUrl()).toBeUndefined();
+    await expect(submitReportOutput(payload)).rejects.toMatchObject({
+      code: 'UNAVAILABLE',
+      message: 'Diagnostic reporting is not configured in this build.',
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('does not import diagnostics or log request content', () => {

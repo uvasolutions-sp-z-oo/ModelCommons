@@ -114,7 +114,7 @@ export function ReportOutputModal({ visible, responseText, context, onClose }: R
           {receipt ? (
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text accessibilityRole="header" style={[styles.successTitle, { color: colors.text }]}>Report sent</Text>
-              <Text selectable style={[styles.body, { color: colors.muted }]}>Uva Solutions received report reference:</Text>
+              <Text selectable style={[styles.body, { color: colors.muted }]}>The configured report receiver accepted report reference:</Text>
               <Text selectable style={[styles.reference, { color: colors.text }]}>{receipt}</Text>
               <Pressable
                 accessibilityLabel="Close report confirmation"
@@ -127,7 +127,7 @@ export function ReportOutputModal({ visible, responseText, context, onClose }: R
             </View>
           ) : (
             <>
-              <Text style={[styles.body, { color: colors.muted }]}>The selected model response shown below will be sent voluntarily to Uva Solutions. No prompt or other conversation message is included.</Text>
+              <Text style={[styles.body, { color: colors.muted }]}>The selected model response shown below will be sent voluntarily to the configured report receiver. No prompt or other conversation message is included.</Text>
 
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Selected response</Text>
@@ -196,7 +196,7 @@ export function ReportOutputModal({ visible, responseText, context, onClose }: R
                 </Pressable>
               </View>
 
-              {!reportingAvailable ? <Text accessibilityLiveRegion="polite" style={styles.error}>Reporting is unavailable in this build.</Text> : null}
+              {!reportingAvailable ? <Text accessibilityLiveRegion="polite" style={[styles.unavailable, { color: colors.muted, backgroundColor: colors.card, borderColor: colors.border }]}>Diagnostic reporting is not configured in this build.</Text> : null}
               {error ? <Text accessibilityLiveRegion="assertive" style={styles.error}>{error}</Text> : null}
               <View style={styles.actions}>
                 <Pressable
@@ -210,7 +210,7 @@ export function ReportOutputModal({ visible, responseText, context, onClose }: R
                   <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Cancel</Text>
                 </Pressable>
                 <Pressable
-                  accessibilityHint="Sends this selected response and report details to Uva Solutions"
+                  accessibilityHint="Sends this selected response and report details to the configured report receiver"
                   accessibilityLabel="Send report"
                   accessibilityRole="button"
                   accessibilityState={{ disabled: !category || submitting || !reportingAvailable, busy: submitting }}
@@ -249,6 +249,7 @@ const styles = StyleSheet.create({
   counter: { fontSize: 12, textAlign: 'right' },
   linkTarget: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
   link: { fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
+  unavailable: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 14, lineHeight: 20 },
   error: { color: palette.danger, backgroundColor: palette.dangerSoft, borderRadius: 10, padding: 12, fontSize: 14, lineHeight: 20 },
   actions: { flexDirection: Platform.OS === 'web' ? 'row' : 'column-reverse', gap: 10 },
   primaryButton: { minHeight: 48, borderRadius: 12, paddingHorizontal: 18, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center', flex: 1 },

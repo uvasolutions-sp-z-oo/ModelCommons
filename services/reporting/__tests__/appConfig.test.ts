@@ -1,21 +1,43 @@
-import { describe, expect, it } from 'vitest';
-import { validateReportUrl } from '../../../app.config';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import resolveExpoConfig, { validateReportUrl } from '../../../app.config';
 
 describe('report URL build configuration', () => {
-  it('permits an absent endpoint only outside production', () => {
-    expect(validateReportUrl(undefined, false)).toBeUndefined();
-    expect(() => validateReportUrl(undefined, true)).toThrow('required for production');
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('treats an absent or blank endpoint as an optional capability', () => {
+    expect(validateReportUrl(undefined)).toBeUndefined();
+    expect(validateReportUrl('')).toBeUndefined();
+    expect(validateReportUrl('   \t\r\n')).toBeUndefined();
   });
 
-  it('requires HTTPS in production and rejects credentials/fragments', () => {
-    expect(validateReportUrl('https://uva.solutions/report', true)).toBe('https://uva.solutions/report');
-    expect(() => validateReportUrl('http://uva.solutions/report', true)).toThrow('HTTPS');
-    expect(() => validateReportUrl('https://user:secret@uva.solutions/report', true)).toThrow('credentials');
-    expect(() => validateReportUrl('https://uva.solutions/report#private', true)).toThrow('fragment');
+  it('resolves production-oriented config without exposing reportUrl when the endpoint is absent', () => {
+    vi.stubEnv('EAS_BUILD_PROFILE', 'production');
+    vi.stubEnv('MODELCOMMONS_REPORT_URL', '');
+    const resolved = resolveExpoConfig({ config: {} } as Parameters<typeof resolveExpoConfig>[0]);
+    expect(resolved.extra?.modelCommons).not.toHaveProperty('reportUrl');
   });
 
-  it('allows HTTP only for local development receivers', () => {
-    expect(validateReportUrl('http://10.0.2.2:8080/report', false)).toBe('http://10.0.2.2:8080/report');
-    expect(() => validateReportUrl('http://example.test/report', false)).toThrow('HTTPS');
+  it('exposes a normalized configured URL in extra.modelCommons', () => {
+    vi.stubEnv('MODELCOMMONS_REPORT_URL', '  https://reports.example.test  ');
+    const resolved = resolveExpoConfig({ config: {} } as Parameters<typeof resolveExpoConfig>[0]);
+    expect(resolved.extra?.modelCommons).toMatchObject({ reportUrl: 'https://reports.example.test/' });
+  });
+
+  it('normalizes valid HTTPS URLs', () => {
+    expect(validateReportUrl('  https://reports.example.test  ')).toBe('https://reports.example.test/');
+  });
+
+  it('allows HTTP only for supported local loopback receivers', () => {
+    expect(validateReportUrl('http://localhost/report')).toBe('http://localhost/report');
+    expect(validateReportUrl('http://127.0.0.1:8080/report')).toBe('http://127.0.0.1:8080/report');
+    expect(validateReportUrl('http://10.0.2.2:8080/report')).toBe('http://10.0.2.2:8080/report');
+    expect(() => validateReportUrl('http://example.test/report')).toThrow('HTTPS');
+  });
+
+  it('rejects malformed URLs, credentials, and fragments', () => {
+    expect(() => validateReportUrl('not a URL')).toThrow('valid absolute URL');
+    expect(() => validateReportUrl('https://user@example.test/report')).toThrow('credentials');
+    expect(() => validateReportUrl('https://user:secret@example.test/report')).toThrow('credentials');
+    expect(() => validateReportUrl('https://example.test/report#private')).toThrow('fragment');
   });
 });

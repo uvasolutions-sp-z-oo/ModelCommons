@@ -18,8 +18,8 @@ Trust changes at six boundaries:
 3. runtime to model/store files;
 4. generated output to application tools or UI; and
 5. app sandbox to user-selected or App Group storage; and
-6. an explicit, user-confirmed output report crossing from the app to Uva
-   Solutions over the configured HTTPS receiver.
+6. an explicit, user-confirmed output report crossing from the app to an
+   operator-controlled receiver, when one is configured.
 
 The model and its output are untrusted content. A downloaded GGUF is also
 untrusted input even when its source is reputable.
@@ -90,10 +90,12 @@ The report receiver is an intentional exception to local-only data flow and is
 never automatic. The user chooses one completed assistant response, sees the
 exact submitted preview (including visible 12,000-character truncation), chooses
 a category, and confirms transmission. The build-time receiver URL contains no
-secret, production configuration rejects non-HTTPS URLs, transport has a bounded
-timeout, receipts are validated strictly, and raw server responses are never
-shown. The flow must stay separate from diagnostic logging and provider-injected
-fetch implementations.
+secret, configuration rejects non-HTTPS URLs except local loopback development
+receivers, transport has a bounded timeout, receipts are validated strictly, and
+raw server responses are never shown. An absent URL disables this capability
+without affecting other ModelCommons features, and there is no fallback receiver.
+The flow must stay separate from diagnostic logging and provider-injected fetch
+implementations.
 
 ## Security release gate
 
