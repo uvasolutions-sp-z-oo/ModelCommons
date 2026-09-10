@@ -20,13 +20,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
-      ...(appGroup
-        ? {
-            entitlements: {
+      entitlements: {
+        "com.apple.developer.kernel.extended-virtual-addressing": true,
+        "com.apple.developer.kernel.increased-memory-limit": true,
+        ...(appGroup
+          ? {
               "com.apple.security.application-groups": [appGroup],
-            },
-          }
-        : {}),
+            }
+          : {}),
+      },
     },
     android: {
       adaptiveIcon: {
