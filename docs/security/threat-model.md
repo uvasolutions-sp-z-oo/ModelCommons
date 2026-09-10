@@ -11,13 +11,15 @@ Protected assets include prompts, responses, tool inputs/results, medical or
 commercial data, model artifacts, model-license acceptance, client approvals,
 signing identities, provider configuration, and device diagnostics.
 
-Trust changes at five boundaries:
+Trust changes at six boundaries:
 
 1. application code to the provider-neutral client;
 2. client to an in-process or cross-app transport;
 3. runtime to model/store files;
 4. generated output to application tools or UI; and
-5. app sandbox to user-selected or App Group storage.
+5. app sandbox to user-selected or App Group storage; and
+6. an explicit, user-confirmed output report crossing from the app to Uva
+   Solutions over the configured HTTPS receiver.
 
 The model and its output are untrusted content. A downloaded GGUF is also
 untrusted input even when its source is reputable.
@@ -39,6 +41,9 @@ untrusted input even when its source is reputable.
 | Model output triggers link/image egress | Current Hub renders output as inert selectable text, without Markdown, remote images, or active links; downstream renderers impose their own URL policy | no automatic request/navigation |
 | Tampered persisted preferences/approvals | Rehydration validates bounded identities, capabilities and authorization shape, clamps numeric settings, and drops malformed failure records | invalid state discarded/defaulted |
 | Sensitive logs/telemetry | Data minimization; content logging off; coarse opt-in benchmarks; local retention/deletion controls | omit data |
+| Report flow leaks a conversation or identity | Builder projects only one selected assistant response and fixed metadata; inert preview, explicit category/final confirmation, normal scoped HTTPS fetch, no diagnostics, history, offline queue, credentials, device ID, prompt, or surrounding messages | no request or a fixed user-facing error |
+| Report replay creates duplicates or changed-content ambiguity | Cryptographic UUID v4 per form state; unchanged retries reuse UUID and timestamp; receiver enforces unique ID plus deterministic payload hash | idempotent receipt or fixed conflict |
+| Malicious model output executes during review | Plain selectable `Text`; no Markdown/HTML/link/image renderer and no linkification | content remains inert |
 | Memory/thermal denial of service | Compatibility preflight, bounded context/output, conservative default profile, cancellation, release, prior-OOM downgrade | `INSUFFICIENT_MEMORY` |
 
 ## Provider adapter invariant
@@ -80,6 +85,15 @@ The current acceptance record is bound to model ID/revision plus license ID/URL,
 but not a terms-content digest/version. Catalog owners must use immutable terms
 or rotate an identity field when content changes; binding to immutable content is
 still required before a strong audit claim.
+
+The report receiver is an intentional exception to local-only data flow and is
+never automatic. The user chooses one completed assistant response, sees the
+exact submitted preview (including visible 12,000-character truncation), chooses
+a category, and confirms transmission. The build-time receiver URL contains no
+secret, production configuration rejects non-HTTPS URLs, transport has a bounded
+timeout, receipts are validated strictly, and raw server responses are never
+shown. The flow must stay separate from diagnostic logging and provider-injected
+fetch implementations.
 
 ## Security release gate
 

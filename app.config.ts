@@ -1,7 +1,32 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
+export function validateReportUrl(value: string | undefined, production: boolean): string | undefined {
+  const candidate = value?.trim();
+  if (!candidate) {
+    if (production) throw new Error("MODELCOMMONS_REPORT_URL is required for production builds.");
+    return undefined;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error("MODELCOMMONS_REPORT_URL must be a valid absolute URL.");
+  }
+  const developmentLoopback = parsed.protocol === "http:"
+    && ["localhost", "127.0.0.1", "10.0.2.2"].includes(parsed.hostname);
+  if (parsed.protocol !== "https:" && (production || !developmentLoopback)) {
+    throw new Error("MODELCOMMONS_REPORT_URL must use HTTPS (HTTP is allowed only for a local development receiver).");
+  }
+  if (parsed.username || parsed.password || parsed.hash) {
+    throw new Error("MODELCOMMONS_REPORT_URL must not contain credentials or a URL fragment.");
+  }
+  return parsed.toString();
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appGroup = process.env.MODELCOMMONS_APP_GROUP?.trim();
+  const production = process.env.MODELCOMMONS_PRODUCTION_BUILD === "1";
+  const reportUrl = validateReportUrl(process.env.MODELCOMMONS_REPORT_URL, production);
   return {
     ...config,
     name: "ModelCommons",
@@ -77,6 +102,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
       modelCommons: {
         appGroupConfigured: !!appGroup,
+        ...(reportUrl ? { reportUrl } : {}),
       },
     },
   };

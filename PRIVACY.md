@@ -32,7 +32,10 @@ The current host/native components may contain:
   consuming iOS application's private storage; and
 - selected model/profile/context/output preferences and at most 20 coarse
   runtime-failure records containing model ID, profile ID, category, and time.
-  The full device profile is not persisted.
+  The full device profile is not persisted; and
+- an adult-notice boolean acknowledgement, acknowledgement-policy version, and
+  acknowledgement time. ModelCommons does not request or store a date of birth,
+  identity document, name, or account for this disclosure/access gate.
 
 Device benchmark schemas exist, but the repository currently has no benchmark
 collector/writer. Any future collection remains subject to the minimization rule
@@ -48,6 +51,26 @@ Model downloads contact the source URL declared by a manifest. That request can
 reveal network metadata such as IP address and user agent to the model host.
 Gated sources may require the user to authenticate under the model publisher's
 terms.
+
+A completed assistant response has a voluntary **Report output** action. Only
+after the user selects a category, reviews an inert preview, optionally adds a
+note, and presses **Send report**, the app sends the selected response (limited
+visibly to 12,000 characters), truncation flag, category, optional note, model
+ID and immutable revision, app/runtime version, platform, locale, a random
+one-report UUID, and client time to Uva Solutions. It does not send the prompt,
+other conversation messages, conversation title/session ID, identity/contact or
+location data, advertising/persistent device ID, diagnostics/device profile,
+memory data, stack traces, exception text, paths, credentials, or attachments.
+Failed reports are neither persisted nor queued; an unchanged manual retry
+reuses its report UUID for receiver idempotency. Editing the report creates a
+new UUID. Ordinary chats make no report request.
+
+The published ModelCommons Privacy Policy is available at
+<https://uva.solutions/index.php?option=com_content&view=article&id=80&catid=8&lang=en&Itemid=128>.
+The receiver defaults to 180-day report-content retention and allows earlier
+administrator deletion. Server/proxy access logs may still contain network
+metadata such as IP address and request time; they must not log POST bodies and
+remain governed by Uva Solutions infrastructure retention.
 
 Provider compatibility through an injected ModelCommons fetch is intended to be
 offline and must not perform DNS or network fallback. The current Hub has no
@@ -90,7 +113,7 @@ logger is disabled by default, user-controlled, and accepts an explicit metadata
 allowlist rather than prompts or responses. Those are source-code properties,
 not a completed privacy assessment.
 
-Residual gaps as of 2026-08-27 are:
+Residual gaps as of 2026-09-10 are:
 
 - Hub runtime preferences, sanitized runtime-failure history, and authorization
   records are persisted in AsyncStorage. Rehydration now validates/bounds
@@ -111,6 +134,10 @@ Residual gaps as of 2026-08-27 are:
   protected-data states, and cross-process file replacement have no
   physical-device privacy evidence. The iOS connector also lacks
   `NSFileCoordinator` around shared access.
+- The voluntary receiver and production EAS endpoint still require deployment,
+  published-policy alignment, and physical-device verification. Reporting does
+  not prevent or moderate prohibited model output and does not alone complete
+  store-policy compliance.
 
 Do not use the prototype with confidential, medical, regulated, or production
 customer data until those controls and the physical-device matrix are reviewed.

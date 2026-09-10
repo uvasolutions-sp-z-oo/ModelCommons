@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AdultNotice } from '@/components/modelcommons/AdultNotice';
 import { initializeModelCommonsHub } from '@/services/modelcommons/lifecycle';
 
 export const unstable_settings = {
@@ -17,11 +18,13 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
-      </Stack>
-      <StatusBar style="auto" />
+      <AdultNotice>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </AdultNotice>
     </ThemeProvider>
   );
 }

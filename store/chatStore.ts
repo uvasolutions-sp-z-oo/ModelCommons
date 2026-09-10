@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChatSession, Role } from '../types';
+import type { ChatSession, MessageExecutionContext, Role } from '../types';
 
 const generateId = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
@@ -9,7 +9,7 @@ interface ChatState {
   currentSessionId: string | null;
   actions: {
     createNewSession: () => string;
-    addMessage: (sessionId: string, role: Role, content: string) => void;
+    addMessage: (sessionId: string, role: Role, content: string, executionContext?: MessageExecutionContext) => void;
     deleteSession: (sessionId: string) => void;
     selectSession: (sessionId: string) => void;
     clearAllSessions: () => void;
@@ -31,7 +31,7 @@ export const useChatStore = create<ChatState>((set) => ({
       }));
       return id;
     },
-    addMessage: (sessionId, role, content) => set((state) => ({
+    addMessage: (sessionId, role, content, executionContext) => set((state) => ({
       sessions: state.sessions.map((session) => {
         if (session.id !== sessionId) return session;
         const now = Date.now();
@@ -42,7 +42,13 @@ export const useChatStore = create<ChatState>((set) => ({
             ? `${content.slice(0, 36)}${content.length > 36 ? '…' : ''}`
             : session.title,
           lastUpdated: now,
-          messages: [...session.messages, { id: generateId('message'), role, content, timestamp: now }],
+          messages: [...session.messages, {
+            id: generateId('message'),
+            role,
+            content,
+            timestamp: now,
+            ...(role === 'assistant' && executionContext ? { executionContext } : {}),
+          }],
         };
       }).sort((a, b) => b.lastUpdated - a.lastUpdated),
     })),

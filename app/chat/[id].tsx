@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import Constants from 'expo-constants';
 import type { ModelCommonsMessage } from '@modelcommons/protocol';
 import { InputArea } from '../../components/InputArea';
 import MessageItem from '../../components/MessageItem';
 import { Badge, palette } from '../../components/modelcommons/HubUI';
+import { ReportOutputModal } from '../../components/modelcommons/ReportOutputModal';
 import { streamHubChat } from '../../services/modelcommons/inference';
 import { selectHubTextRecord } from '../../services/modelcommons/selection';
 import { useChatStore } from '../../store/chatStore';
@@ -25,16 +27,18 @@ export default function ChatScreen() {
   const experimentalEnabled = useHubStore((state) => state.experimentalEnabled);
   const deviceProfile = useHubStore((state) => state.deviceProfile);
   const session = sessions.find((candidate) => candidate.id === id);
-  const resolvedModelId = selectHubTextRecord(registry, selectedModelId, {
+  const resolvedModel = selectHubTextRecord(registry, selectedModelId, {
     runtimeAvailable,
     runtimeVersion: deviceProfile?.runtimeVersions['llama.rn'],
     experimentalEnabled,
     deviceProfile,
     profileId,
     context,
-  })?.manifest.id ?? selectedModelId;
+  });
+  const resolvedModelId = resolvedModel?.manifest.id ?? selectedModelId;
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState('');
+  const [reportedMessage, setReportedMessage] = useState<Message>();
   const abort = useRef<AbortController | null>(null);
   const list = useRef<FlatList<Message>>(null);
 
@@ -62,7 +66,7 @@ export default function ChatScreen() {
     setLoading(true);
     setStreaming('');
     try {
-      const answer = await streamHubChat({
+      const result = await streamHubChat({
         messages: history,
         modelId: resolvedModelId,
         profile: profileId,
@@ -71,7 +75,15 @@ export default function ChatScreen() {
         signal: controller.signal,
         onText: setStreaming,
       });
-      if (answer.trim()) chatActions.addMessage(session.id, 'assistant', answer);
+      if (result.text.trim()) {
+        const runtimeVersion = deviceProfile?.runtimeVersions[result.runtimeId];
+        if (!runtimeVersion) throw new Error('The active runtime version could not be resolved.');
+        chatActions.addMessage(session.id, 'assistant', result.text, {
+          modelId: result.modelId,
+          modelRevision: result.modelRevision,
+          runtimeVersion,
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Local inference failed.';
       if (!controller.signal.aborted) {
@@ -97,12 +109,36 @@ export default function ChatScreen() {
           ref={list}
           data={displayed}
           keyExtractor={(message) => message.id}
-          renderItem={({ item }) => <MessageItem message={item} />}
+          renderItem={({ item }) => (
+            <MessageItem
+              message={item}
+              onReportOutput={
+                (Platform.OS === 'android' || Platform.OS === 'ios')
+                && item.role === 'assistant'
+                && !!item.executionContext
+                  ? setReportedMessage
+                  : undefined
+              }
+            />
+          )}
           contentContainerStyle={styles.messages}
           onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyTitle}>Local, generic chat</Text><Text style={styles.emptyText}>Prompts and responses remain in memory and are excluded from diagnostics.</Text></View>}
         />
         <InputArea onSend={(text) => void send(text)} onCancel={() => abort.current?.abort()} loading={loading} />
+        {reportedMessage?.executionContext ? (
+          <ReportOutputModal
+            visible
+            responseText={reportedMessage.content}
+            context={{
+              ...reportedMessage.executionContext,
+              appVersion: Constants.expoConfig?.version ?? 'unknown',
+              platform: Platform.OS as 'android' | 'ios',
+              locale: (Intl.DateTimeFormat().resolvedOptions().locale || 'en').slice(0, 32),
+            }}
+            onClose={() => setReportedMessage(undefined)}
+          />
+        ) : null}
       </SafeAreaView>
     </KeyboardAvoidingView>
   );

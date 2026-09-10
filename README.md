@@ -190,6 +190,42 @@ MedGemma, medical prompts, medical guardrails, or Tatru branding.
 - The user controls installed models, licenses, authorized clients, storage, and
   deletion.
 
+The Hub also provides an explicit **Report output** action on every completed,
+persisted assistant response. It previews and sends only that selected response,
+a required safety category, an optional note, and model/app/runtime metadata to
+Uva Solutions after final confirmation. It never sends the prompt, surrounding
+conversation, chat/session identity, diagnostics, or device identity, and never
+queues a failed report. See [PRIVACY.md](PRIVACY.md).
+
+Production builds require `MODELCOMMONS_REPORT_URL` to be an HTTPS receiver and
+fail configuration when it is absent or invalid. The value is public build
+configuration, not a credential. Configure it in the EAS `production`
+environment as:
+
+```text
+MODELCOMMONS_REPORT_URL=https://uva.solutions/index.php?option=com_uvaleads&task=report.submit&format=json
+```
+
+After the receiver passes its production smoke test, set and verify the public
+value in the EAS project (quote the URL so the shell does not interpret `&`):
+
+```sh
+eas env:set --name MODELCOMMONS_REPORT_URL --value "https://uva.solutions/index.php?option=com_uvaleads&task=report.submit&format=json" --environment production --visibility plaintext
+eas env:list --environment production
+```
+
+An absent endpoint is allowed for local development; the report form then says
+that reporting is unavailable in that build. Loopback HTTP is allowed only for
+local development. `eas.json` binds the production profile to the EAS
+`production` environment and sets `MODELCOMMONS_PRODUCTION_BUILD=1`, which
+activates the required HTTPS check. Non-EAS release automation must set the same
+marker.
+
+On first run, and whenever the acknowledgement-policy version changes, the Hub
+gates access with an adult-use notice. Confirmation stores only a boolean, the
+policy version, and acknowledgement time. It is a disclosure/access gate, not
+proof of age, and does not collect a date of birth or identity.
+
 Hub chats are now memory-only, legacy remote-provider settings are removed, and
 diagnostics use a metadata allowlist. Persisted settings, authorization,
 license, and bookmark records still need explicit retention/deletion policy and
@@ -243,8 +279,9 @@ license and each entry records its own upstream source and license.
   and Anthropic-shaped examples, each labeled with its current execution status.
 - [`docs`](docs): architecture, compatibility, platform security, model store,
   memory, migration, integrations, research, and verification.
-- [`.env.example`](.env.example): optional `MODELCOMMONS_APP_GROUP` build-time
-  configuration; no entitlement identifier is hardcoded.
+- [`.env.example`](.env.example): optional `MODELCOMMONS_APP_GROUP` and required
+  production `MODELCOMMONS_REPORT_URL` build-time configuration; no entitlement
+  identifier, credential, or report token is hardcoded.
 - `app`, `components`, and `store`: generic Hub UI/state rebuilt from the donor
   shell; chat content is memory-only. MedGemma remains confined to catalog,
   migration, tests, and the reference example.

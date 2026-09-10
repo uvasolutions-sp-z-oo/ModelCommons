@@ -21,7 +21,7 @@ export async function streamHubChat(options: {
   maxOutputTokens: number;
   signal?: AbortSignal;
   onText: (completeText: string) => void;
-}): Promise<string> {
+}): Promise<{ text: string; modelId: string; modelRevision: string; runtimeId: string }> {
   if (!localTransport) {
     throw new ModelCommonsError('RUNTIME_UNAVAILABLE', 'The local llama.rn runtime is not registered in this build.');
   }
@@ -72,7 +72,12 @@ export async function streamHubChat(options: {
     if (!terminal) {
       throw new ModelCommonsError('RUNTIME_INITIALIZATION_FAILED', 'The runtime stream ended without a terminal event.');
     }
-    return complete;
+    return {
+      text: complete,
+      modelId: session.model.manifest.id,
+      modelRevision: session.model.manifest.revision,
+      runtimeId: session.model.runtimeId,
+    };
   } catch (error) {
     primaryError = error;
     throw error;

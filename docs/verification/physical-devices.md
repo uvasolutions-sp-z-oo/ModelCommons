@@ -1,6 +1,6 @@
 # Physical-device verification
 
-Last updated: 2026-08-27. This is a release gate and evidence template, not a
+Last updated: 2026-09-10. This is a release gate and evidence template, not a
 record of completed testing. No device result is claimed in this repository yet.
 
 Simulator/emulator tests remain useful for UI and protocol failures, but they do
@@ -100,6 +100,51 @@ cleanup failure. Repeat the same GGUF flow later on signed iOS hardware.
 - Start an operation on one model and attempt another row operation; prove the
   global UI lock prevents controller replacement and Cancel targets only the
   active operation.
+
+## Adult notice and voluntary output reporting
+
+Run this checklist on the release-signed Android build before enabling its store
+track. Use only synthetic model output and notes:
+
+- First launch shows the full adult-use notice before Hub access. Confirm the
+  button with TalkBack, accept, restart, and verify it stays accepted. Change
+  the policy version in a test build and verify the notice returns. Inspect
+  storage to confirm only boolean acknowledgement, policy version, and time.
+- With TalkBack, navigate from a completed assistant bubble to **Report output**;
+  verify its label, hint, button role, focus order, selected-category radio state,
+  note counter/warning, privacy-policy link, Cancel, Send, errors, success
+  reference, and at least 44dp touch targets. User/system/error/temporary
+  streaming messages must have no action.
+- Repeat at the largest supported font scale. Text, category choices, warning,
+  preview, buttons, receipt, and errors must remain readable and reachable by
+  scrolling without clipped controls.
+- Repeat in light and dark mode. Confirm contrast, focus, selected/disabled/busy
+  states, plain-text preview, and the system privacy-policy handoff.
+- Open a report and press Cancel at multiple points. Confirm no request is made,
+  no report history/queue appears, and the selected response remains only in the
+  memory-only chat.
+- Submit successfully to the approved test receiver. Confirm one `POST` with
+  only the documented fields, the displayed reference exactly matches the
+  receipt, and the administrator preview remains inert.
+- Disable networking and submit. Confirm the bounded failure message preserves
+  category/note for manual retry, creates no queue, and reconnecting plus retry
+  reuses the same report ID and timestamp.
+- Tap Send repeatedly/rapidly. Confirm one in-flight request, one receipt, and
+  disabled Cancel/Send controls while it is in progress.
+- Report synthetic output longer than 12,000 Unicode characters. Confirm the UI
+  warns before sending, previews the exact submitted first 12,000 characters,
+  sends `responseTruncated: true`, and does not silently add the remainder.
+- After a recoverable failure, change category, note, or response in an
+  instrumented test and confirm the next attempt receives a new report ID.
+- Restart during/after a failed report. Confirm no draft, content, report ID,
+  history, or offline request is restored. Only the adult acknowledgement may
+  persist.
+- Instrument normal chat usage without opening Send report. Confirm zero report
+  receiver requests, including generation, cancellation, navigation, background,
+  restart, and ordinary diagnostic logging.
+- Inspect logs/crash capture for the synthetic response and note. Confirm neither
+  appears, raw server responses are not printed, and the reporting module never
+  calls `diagnosticLogger`.
 
 Record cold initialization milliseconds, prompt/generation tokens per second,
 peak process memory where platform tooling permits, OS memory/thermal warnings,
