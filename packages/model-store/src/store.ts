@@ -9,6 +9,8 @@ import { assertDownloadOrigin, snapshotPolicy, trustedManifest, type StorePolicy
 export interface ResourceLease {
   id: string;
   uri: string;
+  /** Stat the leased artifact without repeating checksum verification. */
+  inspectFile?(): Promise<{ present: boolean; regular: boolean; sizeMatches: boolean }>;
   release(): Promise<void>;
 }
 
@@ -128,6 +130,7 @@ export function createModelStore(options: {
       let pending: Promise<void> | undefined;
       return { manifest, lease: {
         id: `${port.identity}:${result.id}`, uri: result.uri,
+        inspectFile: () => result.inspectFile(),
         release() {
           if (released) return Promise.resolve();
           if (!pending) pending = result.release().then(() => {
@@ -275,7 +278,15 @@ async function acquireVerified(port: ReadStorePort, manifest: ModelManifest) {
     for (const item of manifest.files.filter((entry) => entry.required)) {
       await verifyFile(port, artifactRelativePath(manifest, item.path), item);
     }
-    return lease;
+    return {
+      id: lease.id, uri: lease.uri,
+      release: () => lease.release(),
+      async inspectFile() {
+        const info = await port.stat(artifactRelativePath(manifest, file.path));
+        return { present: info !== null, regular: info?.regular === true,
+          sizeMatches: info?.size === file.sizeBytes };
+      },
+    };
   } catch (error) {
     try { await lease.release(); } catch { /* preserve integrity failure */ }
     throw error;

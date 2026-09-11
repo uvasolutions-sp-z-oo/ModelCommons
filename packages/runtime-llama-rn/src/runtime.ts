@@ -9,6 +9,7 @@ import {
 import type { NativeCompletionResult, TokenData } from 'llama.rn';
 import { completionParams, contextParams, reportCapabilities, resultContent, resultStopReason, resultToolCalls } from './mapping';
 import { AsyncEventQueue, AsyncMutex } from './mutex';
+import { classifyInitFailure, modelLocationKind, type InitFailureStage } from './initialization';
 import {
   LLAMA_RN_RUNTIME_ID,
   LLAMA_RN_VERSION,
@@ -56,21 +57,6 @@ function contextKey(options: CreateLlamaRnSessionOptions): string {
   });
 }
 
-/**
- * llama.rn can be present in JavaScript while its separately published Android
- * JNI archive was skipped at install time. Never surface its native error text:
- * it can contain implementation paths, and this condition is recoverable by
- * rebuilding with the verified artifact archive installed.
- */
-function isNativeBindingFailure(error: unknown): boolean {
-  const message = error instanceof Error
-    ? error.message
-    : error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
-      ? error.message
-      : '';
-  return /\b(?:jsi bindings not installed|unsatisfiedlinkerror|dlopen failed|librnllama_jni|failed to load native librar(?:y|ies))\b/i.test(message);
-}
-
 class ContextPool {
   private readonly lifecycleMutex = new AsyncMutex();
   private readonly entries = new Map<string, ContextEntry>();
@@ -114,10 +100,39 @@ class ContextPool {
 
       let context: LlamaRnContext | undefined;
       const lease = options.model.lease;
+      const uri = lease?.uri ?? options.model.uri;
+      let failureStage: InitFailureStage = 'loadModule';
+      let fileCheck: { present: boolean; regular: boolean; sizeMatches: boolean } | undefined;
+      let modelInfoProbe: 'not-requested' | 'pending' | 'passed' | 'failed' = 'not-requested';
       try {
         const llama = await this.loadModule();
-        const uri = lease?.uri ?? options.model.uri;
-        context = await llama.initLlama(contextParams(uri, options.profile));
+        failureStage = 'contextParams';
+        const params = contextParams(uri, options.profile);
+        // Keep scope active for both the diagnostic read and the native mmap.
+        // This repeats only stat; the store already verified size and SHA-256.
+        failureStage = 'modelFileCheck';
+        if (lease?.inspectFile) {
+          fileCheck = await lease.inspectFile();
+          if (!fileCheck.present || !fileCheck.regular || !fileCheck.sizeMatches) {
+            throw new ModelCommonsError(
+              fileCheck.present ? 'INTEGRITY_FAILED' : 'MODEL_NOT_FOUND',
+              'The leased model artifact failed its pre-initialization file check.',
+              { details: { initFailureKind: !fileCheck.present ? 'MODEL_FILE_NOT_FOUND'
+                : !fileCheck.regular ? 'MODEL_LOCATION_INVALID' : 'MODEL_LOAD_FAILED' } }
+            );
+          }
+        }
+        if (options.diagnosticModelInfo) {
+          failureStage = 'loadLlamaModelInfo';
+          modelInfoProbe = 'pending';
+          // 0.12.9 passes ctx=null to GGUF: metadata/tensor descriptors only,
+          // no tensor blob. Discard all returned metadata, including strings.
+          await llama.loadLlamaModelInfo(params.model);
+          modelInfoProbe = 'passed';
+        }
+        failureStage = 'initLlama';
+        context = await llama.initLlama(params);
+        failureStage = 'reportCapabilities';
         const entry: ContextEntry = {
           key,
           context,
@@ -158,11 +173,14 @@ class ContextPool {
             leaseReleased,
           });
         }
-        if (error instanceof ModelCommonsError) throw error;
-        const allocationFailure = error instanceof Error && /\b(?:oom|out of memory|alloc(?:ation)?|memory pressure)\b/i.test(error.message);
-        const nativeBindingsUnavailable = isNativeBindingFailure(error);
+        const classified = classifyInitFailure(error);
+        const initFailureKind = classified === 'UNKNOWN' && failureStage === 'contextParams'
+          ? 'INVALID_RUNTIME_PARAMETER' : classified;
+        const allocationFailure = initFailureKind === 'MEMORY_ALLOCATION_FAILED';
+        const nativeBindingsUnavailable = initFailureKind === 'NATIVE_BINDING_UNAVAILABLE';
+        if (modelInfoProbe === 'pending') modelInfoProbe = 'failed';
         throw new ModelCommonsError(
-          allocationFailure
+          error instanceof ModelCommonsError ? error.code : allocationFailure
             ? 'INSUFFICIENT_MEMORY'
             : nativeBindingsUnavailable
               ? 'RUNTIME_UNAVAILABLE'
@@ -170,9 +188,18 @@ class ContextPool {
           allocationFailure
             ? 'llama.rn could not allocate enough memory for this model and profile.'
             : nativeBindingsUnavailable
-              ? 'llama.rn native bindings are unavailable in this build. Rebuild after installing llama.rn’s verified Android native artifacts.'
+              ? 'llama.rn native bindings are unavailable in this build.'
               : 'llama.rn failed to initialize the selected model and profile.',
-          { cause: error, retryable: nativeBindingsUnavailable }
+          { cause: error, retryable: error instanceof ModelCommonsError ? error.retryable : nativeBindingsUnavailable,
+            details: {
+              failureStage, initFailureKind, modelLocationKind: modelLocationKind(uri), modelInfoProbe,
+              ...(fileCheck ? {
+                modelFilePresentBeforeInit: fileCheck.present === true,
+                modelFileRegularBeforeInit: fileCheck.regular === true,
+                modelFileSizeMatchesBeforeInit: fileCheck.sizeMatches === true,
+              } : {}),
+            },
+          }
         );
       }
     });

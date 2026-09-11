@@ -17,6 +17,8 @@ export interface ModelResourceLease {
   id: string;
   /** A file URL or absolute path accepted by llama.rn. */
   uri: string;
+  /** Fresh stat while this lease is active; never hashes or returns a path. */
+  inspectFile?(): Promise<{ present: boolean; regular: boolean; sizeMatches: boolean }>;
   /** Must stop security-scoped access only after the llama context is released. */
   release(): Promise<void>;
 }
@@ -32,6 +34,8 @@ export interface CreateLlamaRnSessionOptions {
   model: LlamaRnModelSource;
   profile: RuntimeProfile;
   enforceContextBudget?: boolean;
+  /** Explicit diagnostic only: parse GGUF metadata without reading tensor data. */
+  diagnosticModelInfo?: boolean;
 }
 
 export interface LlamaRnAvailability {

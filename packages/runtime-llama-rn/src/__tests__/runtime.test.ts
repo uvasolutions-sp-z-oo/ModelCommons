@@ -86,7 +86,7 @@ describe('LlamaRnRuntime lifecycle', () => {
     })).rejects.toMatchObject({
       code: 'RUNTIME_UNAVAILABLE',
       retryable: true,
-      message: 'llama.rn native bindings are unavailable in this build. Rebuild after installing llama.rn’s verified Android native artifacts.',
+      message: 'llama.rn native bindings are unavailable in this build.',
     });
   });
 

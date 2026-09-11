@@ -11,6 +11,8 @@ export interface EmbeddedOptions {
   runtimeFactory?: () => LlamaRnRuntime;
   policy: { maxContext: number; maxOutput: number };
   ownership: 'app-private' | 'shared-files';
+  /** Opt-in GGUF metadata probe for an explicit synthetic diagnostic. */
+  diagnosticModelInfo?: boolean;
   /** Metadata only; supplied by the application, never a global logger. */
   onLoad?: (value: { pending: boolean; modelId: string; profile: RuntimeProfile }) => Promise<void>;
 }
@@ -70,6 +72,7 @@ export function createEmbeddedLocalAI(options: EmbeddedOptions) {
           session = await engine().createSession({
             model: { id: resource.manifest.id, revision: resource.manifest.revision, uri: resource.lease.uri, lease: resource.lease }, profile,
             enforceContextBudget: true,
+            diagnosticModelInfo: options.diagnosticModelInfo === true,
           });
           await options.onLoad?.({ pending: false, modelId: resource.manifest.id, profile });
         } catch (error) {

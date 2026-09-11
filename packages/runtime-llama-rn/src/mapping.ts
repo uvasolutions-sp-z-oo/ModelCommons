@@ -18,6 +18,7 @@ import type {
 } from 'llama.rn';
 import type { LlamaRnContext, LlamaRnReportedCapabilities } from './types';
 import { LLAMA_CPP_BUILD, LLAMA_RN_RUNTIME_ID, LLAMA_RN_VERSION } from './types';
+import { llamaModelLocation } from './initialization';
 
 type ExtendedLlamaMessage = RNLlamaOAICompatibleMessage & {
   name?: string;
@@ -171,9 +172,7 @@ export function contextParams(modelUri: string, profile: RuntimeProfile): Parame
   typeof import('llama.rn')['initLlama']
 >[0] {
   const llama = profile.llama;
-  if (!modelUri.trim()) {
-    throw new ModelCommonsError('INTEGRITY_FAILED', 'The llama model URI must be non-empty.');
-  }
+  const model = llamaModelLocation(modelUri);
   if (
     !Number.isInteger(llama.nCtx) ||
     !Number.isInteger(llama.nBatch) ||
@@ -188,7 +187,7 @@ export function contextParams(modelUri: string, profile: RuntimeProfile): Parame
     throw new ModelCommonsError('INTEGRITY_FAILED', 'nUbatch cannot exceed nBatch.');
   }
   return {
-    model: modelUri,
+    model,
     n_ctx: llama.nCtx,
     n_batch: llama.nBatch,
     n_ubatch: llama.nUbatch,

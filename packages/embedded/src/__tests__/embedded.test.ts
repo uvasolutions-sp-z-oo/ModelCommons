@@ -8,7 +8,7 @@ import { createEmbeddedLocalAI } from '../index';
 import type { CreateLlamaRnSessionOptions } from '@modelcommons/runtime-llama-rn';
 
 afterEach(() => vi.unstubAllGlobals());
-function fixture(ownership: 'app-private' | 'shared-files', failLoad = false) {
+function fixture(ownership: 'app-private' | 'shared-files', failLoad = false, diagnosticModelInfo = false) {
   const lifecycle: string[] = [];
   let serial = 0;
   let pendingLease: { release(): Promise<void> } | undefined;
@@ -55,6 +55,7 @@ function fixture(ownership: 'app-private' | 'shared-files', failLoad = false) {
   };
   const runtimeFactory = vi.fn(() => runtime as never);
   const backend = createEmbeddedLocalAI({ modelStore, ownership, runtimeFactory,
+    diagnosticModelInfo,
     policy: { maxContext: 1024, maxOutput: 128 },
     deviceProvider: async () => ({ schema: 'modelcommons.device-profile', schemaVersion: 1,
       protocolVersion: PROTOCOL_VERSION, platform: 'ios', physicalMemoryBytes: 8 * 1024 ** 3,
@@ -66,6 +67,13 @@ const request = { model: { id: manifest.id, capabilities: ['text'] as ['text'] }
   messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Synthetic question' }] }], maxOutputTokens: 16 };
 
 describe.each(['app-private', 'shared-files'] as const)('%s composition without another inference boundary', (ownership) => {
+  it.each([false, true])('forwards the explicit metadata probe opt-in: %s', async (enabled) => {
+    const f = fixture(ownership, false, enabled);
+    const client = await ModelCommons.connect({ transport: f.backend.transport });
+    const session = await client.createSession({ capabilities: ['text'], modelId: manifest.id });
+    expect(f.runtime.createSession.mock.calls[0][0].diagnosticModelInfo).toBe(enabled);
+    await session.release(); await f.backend.release();
+  });
   it('is lazy, returns resolved identity, serializes contexts, and releases context before lease', async () => {
     const f = fixture(ownership);
     const network = vi.fn(() => { throw Error('Unexpected network inference'); });

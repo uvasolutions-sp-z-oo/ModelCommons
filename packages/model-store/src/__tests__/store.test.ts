@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createModelStore, createReadOnlyModelStore, parseBoundedMetadata, type WriteStorePort } from '../store';
 import { SMOLLM2_360M_INSTRUCT as model } from '../catalog';
 import { assertDownloadOrigin, snapshotPolicy } from '../policy';
@@ -34,6 +34,22 @@ function fixture() {
 }
 
 describe('verified store ownership and publication', () => {
+  it.each([false, true])('provides a fresh leased stat without rehashing, shared=%s', async (shared) => {
+    const f = fixture(); await f.store.install(model.id);
+    const store = shared ? createReadOnlyModelStore(f.port, f.policy) : f.store;
+    const { lease } = await store.acquire(model.id);
+    const hash = vi.spyOn(f.port, 'sha256');
+    const path = `models/${model.storageId}/model.gguf`;
+    expect(await lease.inspectFile!()).toEqual({ present: true, regular: true, sizeMatches: true });
+    f.files.set(path, { size: 1 });
+    expect(await lease.inspectFile!()).toEqual({ present: true, regular: true, sizeMatches: false });
+    f.files.delete(path);
+    expect(await lease.inspectFile!()).toEqual({ present: false, regular: false, sizeMatches: false });
+    expect(hash).not.toHaveBeenCalled();
+    expect(f.calls.filter((call) => call === 'release')).toHaveLength(0);
+    await lease.release();
+    expect(f.calls.filter((call) => call === 'release')).toHaveLength(1);
+  });
   it('never cross-resolves the same model ID between private roots', async () => {
     const a = fixture(), b = fixture();
     await a.store.install(model.id);
