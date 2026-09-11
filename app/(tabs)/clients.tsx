@@ -9,6 +9,7 @@ import {
 import type { AuthorizedClient } from '@modelcommons/protocol';
 import { ActionButton, Badge, Card, HubScreen, KeyValue, Muted, SectionTitle } from '../../components/modelcommons/HubUI';
 import { useHubStore } from '../../store/inferenceStore';
+import { modelStore } from '../../services/modelcommons/modelStore';
 
 function authorizationId(packageName: string, userId: number, certificate: string): string {
   return `android:${userId}:${encodeURIComponent(packageName)}:${certificate}`;
@@ -16,6 +17,7 @@ function authorizationId(packageName: string, userId: number, certificate: strin
 
 export default function ClientsScreen() {
   const clients = useHubStore((state) => state.authorizedClients);
+  const registry = useHubStore((state) => state.registry);
   const selectedModelId = useHubStore((state) => state.selectedModelId);
   const profileId = useHubStore((state) => state.profileId);
   const context = useHubStore((state) => state.context);
@@ -114,6 +116,16 @@ export default function ClientsScreen() {
 
   return (
     <HubScreen title="Clients" subtitle="Application identity, package certificates, model intent, and revocable access. Client configs contain no secrets.">
+      {Platform.OS === 'ios' ? <Card>
+        <SectionTitle>Shared model storage</SectionTitle>
+        <KeyValue label="Destination" value={modelStore.storageDestination === 'app-group' ? 'Configured App Group / ModelCommons' : 'On My iPhone / ModelCommons / ModelCommons'} />
+        <KeyValue label="Published models" value={String(registry.models.filter((entry) => entry.state === 'READY').length)} />
+        <Muted>{modelStore.storageDestination === 'documents'
+          ? 'In the consuming app, choose the local ModelCommons folder containing protocol.json and registry.json. Select the folder, not a GGUF. Files labels may vary.'
+          : 'Install models directly into this configured group store. Connect the same provisioned App Group in the consuming app. Existing Documents models are not moved or copied.'}</Muted>
+        <Muted>models contains immutable revision folders, each with manifest.json and its declared model files. Published status is not proof of cross-app inference.</Muted>
+        <Muted>Each app runs its own inference context. Files sharing currently accepts direct on-device application Documents folders only; cloud and third-party providers are unsupported. Model deletion remains deferred because another app may still be using a file.</Muted>
+      </Card> : null}
       <Card>
         <SectionTitle>Integration config</SectionTitle>
         <Muted>Export a provider-neutral text-only starting point. Replace the placeholder package ID and approve it in the Hub; aliases are empty by default. Add tools only after the selected backend reports them.</Muted>

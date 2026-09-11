@@ -22,6 +22,9 @@ export function validateReportUrl(value: string | undefined): string | undefined
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appGroup = process.env.MODELCOMMONS_APP_GROUP?.trim();
+  const storageDestination = process.env.MODELCOMMONS_IOS_STORE?.trim() || 'documents';
+  if (!['documents', 'app-group'].includes(storageDestination)) throw new Error('MODELCOMMONS_IOS_STORE must be documents or app-group.');
+  if (storageDestination === 'app-group' && !appGroup) throw new Error('App Group storage requires MODELCOMMONS_APP_GROUP.');
   const reportUrl = validateReportUrl(process.env.MODELCOMMONS_REPORT_URL);
   return {
     ...config,
@@ -73,6 +76,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         {
           androidHubService: true,
           iosAppGroups: appGroup ? [appGroup] : [],
+          iosOwnerAppGroup: storageDestination === 'app-group' ? appGroup : undefined,
           iosExposeDocumentsInFiles: true,
         },
       ],
@@ -98,6 +102,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
       modelCommons: {
         appGroupConfigured: !!appGroup,
+        storageDestination,
         ...(reportUrl ? { reportUrl } : {}),
       },
     },

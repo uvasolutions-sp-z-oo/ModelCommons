@@ -34,6 +34,25 @@ function fixture() {
 }
 
 describe('verified store ownership and publication', () => {
+  it('hashes and inspects the acquired lease instead of resolving the artifact path again', async () => {
+    const f = fixture(); await f.store.install(model.id);
+    const stat = vi.fn(async () => ({ size: model.files[0].sizeBytes!, regular: true }));
+    const sha256 = vi.fn(async () => model.files[0].integrity!.digest);
+    f.port.acquire = async (path) => ({ id: path, uri: 'file:///leased/artifact.gguf', stat, sha256, release: async () => {} });
+    f.port.sha256 = async () => { throw Error('Path-based re-open during verification'); };
+    const resource = await createReadOnlyModelStore(f.port, f.policy).acquire(model.id);
+    await resource.lease.inspectFile!();
+    expect(stat).toHaveBeenCalledTimes(2); expect(sha256).toHaveBeenCalledTimes(1);
+    await resource.lease.release();
+  });
+  it('reports unresolved resource cleanup on integrity failure', async () => {
+    const f = fixture(); await f.store.install(model.id);
+    f.port.acquire = async (path) => ({ id: path, uri: 'file:///leased/artifact.gguf',
+      stat: async () => ({ size: 1, regular: true }), release: async () => { throw Error('cleanup'); } });
+    await expect(createReadOnlyModelStore(f.port, f.policy).acquire(model.id)).rejects.toMatchObject({
+      code: 'STORAGE_UNAVAILABLE', details: { resourceCleanupFailed: true },
+    });
+  });
   it.each([false, true])('provides a fresh leased stat without rehashing, shared=%s', async (shared) => {
     const f = fixture(); await f.store.install(model.id);
     const store = shared ? createReadOnlyModelStore(f.port, f.policy) : f.store;

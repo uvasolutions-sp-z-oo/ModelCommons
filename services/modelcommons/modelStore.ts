@@ -1,8 +1,10 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import {
   atomicReplaceFile as nativeAtomicReplaceFile,
   hasNativeMethod,
+  resolveOwnerAppGroupRoot,
   publishAndroidHubState as nativePublishAndroidHubState,
   sha256File as nativeSha256File,
 } from '@modelcommons/native';
@@ -75,6 +77,7 @@ export interface ModelDownloadProgress {
 }
 
 export interface ModelStoreOptions {
+  storageDestination?: 'documents' | 'app-group';
   beforeDelete?: (modelId: string) => Promise<void>;
 }
 
@@ -88,18 +91,6 @@ function documentRoot(): string {
     );
   }
   return FileSystem.documentDirectory;
-}
-
-function storeRoot(): string {
-  return `${documentRoot()}${STORE_DIRECTORY}/`;
-}
-
-function storeUri(relativePath: string): string {
-  return `${storeRoot()}${assertSafeRelativePath(relativePath)}`;
-}
-
-function modelDirectory(manifest: ModelManifest): string {
-  return `${storeRoot()}models/${assertSafeStorageId(manifest.storageId)}/`;
 }
 
 function basenameFromUri(uri: string): string {
@@ -386,6 +377,8 @@ function createDownloadManifest(manifest: ModelManifest): DownloadManifest {
 }
 
 export class ModelStore {
+  readonly storageDestination: 'documents' | 'app-group';
+  #groupRoot?: string;
   #beforeDelete?: (modelId: string) => Promise<void>;
   #registry: ModelRegistry = createEmptyRegistry();
   #initialized = false;
@@ -395,6 +388,7 @@ export class ModelStore {
 
   constructor(options: ModelStoreOptions = {}) {
     this.#beforeDelete = options.beforeDelete;
+    this.storageDestination = options.storageDestination ?? 'documents';
   }
 
   setBeforeDelete(handler: (modelId: string) => Promise<void>): void {
@@ -402,7 +396,19 @@ export class ModelStore {
   }
 
   get rootUri(): string | undefined {
-    return FileSystem.documentDirectory ? storeRoot() : undefined;
+    return this.storageDestination === 'app-group' ? this.#groupRoot
+      : FileSystem.documentDirectory ? this.#storeRoot() : undefined;
+  }
+
+  #storeRoot(): string {
+    if (this.storageDestination === 'documents') return `${documentRoot()}${STORE_DIRECTORY}/`;
+    if (!this.#groupRoot) throw new ModelCommonsError('MODEL_NOT_READY', 'Initialize the configured App Group store first.');
+    return this.#groupRoot;
+  }
+
+  #storeUri(path: string): string { return `${this.#storeRoot()}${assertSafeRelativePath(path)}`; }
+  #modelDirectory(manifest: ModelManifest): string {
+    return `${this.#storeRoot()}models/${assertSafeStorageId(manifest.storageId)}/`;
   }
 
   get catalog(): readonly ModelManifest[] {
@@ -425,16 +431,21 @@ export class ModelStore {
   }
 
   async #initializeStore(): Promise<ModelRegistry> {
-    if (!FileSystem.documentDirectory) {
+    if (this.storageDestination === 'app-group') {
+      if (Platform.OS !== 'ios') throw new ModelCommonsError('FEATURE_UNSUPPORTED', 'App Group ownership requires iOS.');
+      const resolved = await resolveOwnerAppGroupRoot();
+      this.#groupRoot = resolved.endsWith('/') ? resolved : `${resolved}/`;
+    }
+    if (!FileSystem.documentDirectory && this.storageDestination === 'documents') {
       this.#initialized = true;
       return this.#registry;
     }
 
-    await ensureDirectory(storeRoot());
+    await ensureDirectory(this.#storeRoot());
     for (const directory of ['models', 'clients', 'profiles', 'device', 'migrations']) {
-      await ensureDirectory(`${storeRoot()}${directory}/`);
+      await ensureDirectory(`${this.#storeRoot()}${directory}/`);
     }
-    const protocolUri = storeUri(PROTOCOL_FILE);
+    const protocolUri = this.#storeUri(PROTOCOL_FILE);
     const storedProtocol = await readJson<unknown>(protocolUri);
     if (storedProtocol) {
       const marker = storedRecord(storedProtocol, 'Stored protocol marker');
@@ -457,11 +468,11 @@ export class ModelStore {
       });
     }
 
-    const stored = await readJson<unknown>(storeUri(REGISTRY_FILE));
+    const stored = await readJson<unknown>(this.#storeUri(REGISTRY_FILE));
     this.#registry = stored ? parseModelRegistry(stored) : createEmptyRegistry();
     if (!stored) await this.#publishRegistry(this.#registry);
 
-    await this.#migrateLegacyMedGemma();
+    if (this.storageDestination === 'documents') await this.#migrateLegacyMedGemma();
     await this.#repairReadyStates();
     await publishAndroidHubSnapshot(this.#registry);
     this.#initialized = true;
@@ -528,10 +539,10 @@ export class ModelStore {
 
       try {
         await this.#assertDownloadSpace(manifest);
-        await ensureDirectory(modelDirectory(manifest));
+        await ensureDirectory(this.#modelDirectory(manifest));
         await this.#publishRegistry(updateModelState(this.#registry, manifest, 'DOWNLOADING'));
 
-        const downloadManifestUri = `${modelDirectory(manifest)}${DOWNLOAD_MANIFEST_FILE}`;
+        const downloadManifestUri = `${this.#modelDirectory(manifest)}${DOWNLOAD_MANIFEST_FILE}`;
         let state = parseDownloadState(await readJson<unknown>(downloadManifestUri), manifest);
         if (!state) {
           state = createDownloadManifest(manifest);
@@ -554,12 +565,12 @@ export class ModelStore {
             bytesExpected: file.sizeBytes,
             percent: undefined,
           });
-          await verifyArtifact(`${modelDirectory(manifest)}${assertSafeRelativePath(file.path)}`, file);
+          await verifyArtifact(`${this.#modelDirectory(manifest)}${assertSafeRelativePath(file.path)}`, file);
           if (options.signal?.aborted) {
             throw new ModelCommonsError('USER_CANCELLED', 'Model verification was cancelled.');
           }
         }
-        await atomicWriteJson(`${modelDirectory(manifest)}manifest.json`, manifest);
+        await atomicWriteJson(`${this.#modelDirectory(manifest)}manifest.json`, manifest);
         if (options.signal?.aborted) {
           throw new ModelCommonsError('USER_CANCELLED', 'Model publication was cancelled before READY.');
         }
@@ -585,7 +596,7 @@ export class ModelStore {
       const record = this.#registry.models.find((entry) => entry.manifest.id === modelId);
       if (!record) return this.#registry;
       await this.#beforeDelete?.(modelId);
-      const directory = modelDirectory(record.manifest);
+      const directory = this.#modelDirectory(record.manifest);
       await FileSystem.deleteAsync(directory, { idempotent: true });
       this.#verifiedRevisions.delete(this.#revisionKey(record.manifest));
       await this.#publishRegistry(removeModelRecord(this.#registry, record.manifest));
@@ -595,7 +606,7 @@ export class ModelStore {
 
   artifactUri(manifest: ModelManifest, role: ModelArtifactFile['role']): string | undefined {
     const file = manifest.files.find((candidate) => candidate.role === role);
-    return file ? `${modelDirectory(manifest)}${assertSafeRelativePath(file.path)}` : undefined;
+    return file ? `${this.#modelDirectory(manifest)}${assertSafeRelativePath(file.path)}` : undefined;
   }
 
   /** Performs the full checksum gate once per immutable revision/process before load. */
@@ -614,7 +625,7 @@ export class ModelStore {
       if (this.#verifiedRevisions.has(key)) return;
       try {
         for (const file of record.manifest.files.filter((candidate) => candidate.required)) {
-          await verifyArtifact(`${modelDirectory(record.manifest)}${assertSafeRelativePath(file.path)}`, file);
+          await verifyArtifact(`${this.#modelDirectory(record.manifest)}${assertSafeRelativePath(file.path)}`, file);
         }
         this.#verifiedRevisions.add(key);
       } catch (error) {
@@ -655,7 +666,7 @@ export class ModelStore {
       });
     }
     const source = assertHttpsUrl(file.download.url);
-    const destination = `${modelDirectory(manifest)}${assertSafeRelativePath(file.path)}`;
+    const destination = `${this.#modelDirectory(manifest)}${assertSafeRelativePath(file.path)}`;
     const partial = `${destination}.part`;
     const fileState = state.files.find((candidate) => candidate.path === file.path)
       ?? { path: file.path, bytesWritten: 0, bytesExpected: file.sizeBytes, completed: false };
@@ -749,7 +760,7 @@ export class ModelStore {
     let required = 0;
     for (const file of manifest.files.filter((candidate) => candidate.required)) {
       if (file.sizeBytes === undefined) continue;
-      const destination = `${modelDirectory(manifest)}${assertSafeRelativePath(file.path)}`;
+      const destination = `${this.#modelDirectory(manifest)}${assertSafeRelativePath(file.path)}`;
       const finalInfo = (await FileSystem.getInfoAsync(destination)) as SizedFileInfo;
       const partialInfo = (await FileSystem.getInfoAsync(`${destination}.part`)) as SizedFileInfo;
       const present = finalInfo.exists ? finalInfo.size ?? 0 : partialInfo.exists ? partialInfo.size ?? 0 : 0;
@@ -770,7 +781,7 @@ export class ModelStore {
           // Startup performs a cheap existence/size repair. Full SHA-256 runs
           // once per process immediately before the first model load.
           await verifyArtifact(
-            `${modelDirectory(record.manifest)}${assertSafeRelativePath(file.path)}`,
+            `${this.#modelDirectory(record.manifest)}${assertSafeRelativePath(file.path)}`,
             file,
             { verifyIntegrity: false }
           );
@@ -786,7 +797,7 @@ export class ModelStore {
 
   async #migrateLegacyMedGemma(): Promise<void> {
     const legacyRoot = `${documentRoot()}${LEGACY_DIRECTORY}/`;
-    const journalUri = storeUri(MIGRATION_JOURNAL_FILE);
+    const journalUri = this.#storeUri(MIGRATION_JOURNAL_FILE);
     let journal = parseMigrationJournal(await readJson<unknown>(journalUri));
     const legacyExists = await exists(legacyRoot);
     if (!journal && !legacyExists) return;
@@ -824,7 +835,7 @@ export class ModelStore {
       await atomicWriteJson(journalUri, journal);
     }
 
-    const destination = `${storeRoot()}models/${assertSafeStorageId(journal.storageId)}/`;
+    const destination = `${this.#storeRoot()}models/${assertSafeStorageId(journal.storageId)}/`;
     const destinationExists = await exists(destination);
     if (legacyExists && !destinationExists) {
       await FileSystem.moveAsync({ from: legacyRoot, to: destination });
@@ -895,7 +906,7 @@ export class ModelStore {
   }
 
   async #publishRegistry(next: ModelRegistry): Promise<void> {
-    await atomicWriteJson(storeUri(REGISTRY_FILE), next);
+    await atomicWriteJson(this.#storeUri(REGISTRY_FILE), next);
     this.#registry = next;
     await publishAndroidHubSnapshot(next);
   }
@@ -917,4 +928,7 @@ export class ModelStore {
   }
 }
 
-export const modelStore = new ModelStore();
+export const modelStore = new ModelStore({
+  storageDestination: Platform.OS === 'ios'
+    && Constants.expoConfig?.extra?.modelCommons?.storageDestination === 'app-group' ? 'app-group' : 'documents',
+});

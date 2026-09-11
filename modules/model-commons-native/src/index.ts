@@ -161,6 +161,16 @@ export async function connectAppGroup(groupIdentifier: string): Promise<SharedDi
   );
 }
 
+/** Explicitly configured owner destination; unavailable groups never fall back. */
+export async function resolveOwnerAppGroupRoot(): Promise<string> {
+  return callNative(() => requireMethod('ownerAppGroupRoot')(), NATIVE_ERRORS.connectAppGroup);
+}
+
+/** Owner-requested synthetic evidence; no private store is created. */
+export async function inspectPrivateModelEvidence() {
+  return callNative(() => requireMethod('privateModelEvidence')(), NATIVE_ERRORS.acquireLease);
+}
+
 export async function listSharedConnections(): Promise<SharedDirectoryConnection[]> {
   return callNative(
     () => (requireMethod('listSharedConnections') as () => Promise<SharedDirectoryConnection[]>)(),
@@ -198,6 +208,11 @@ export class ModelFileLease {
     );
   }
 
+  async stat(): Promise<{ size: number; regular: boolean }> {
+    if (this.released) throw new ModelCommonsError('STORAGE_UNAVAILABLE', 'The model file lease has been released.');
+    return callNative(() => requireMethod('statLease')(this.id), NATIVE_ERRORS.acquireLease);
+  }
+
   async release(): Promise<void> {
     if (this.released) return;
     if (this.releasePromise) return this.releasePromise;
@@ -225,7 +240,12 @@ export async function acquireModelLease(connectionId: string, relativePath: stri
     ) => Promise<NativeLeaseDescriptor>)(connectionId, relativePath),
     NATIVE_ERRORS.acquireLease
   );
-  return new ModelFileLease(descriptor);
+  const lease = new ModelFileLease(descriptor);
+  if (descriptor.coordinationVersion !== 1) {
+    await lease.release();
+    throw new ModelCommonsError('RUNTIME_UNAVAILABLE', 'Shared models require a new native build with lifetime coordination.');
+  }
+  return lease;
 }
 
 export async function connectAndroidHub(packageName: string): Promise<AndroidServiceInfo> {

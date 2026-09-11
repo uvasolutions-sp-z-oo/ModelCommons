@@ -3,7 +3,8 @@ import { ModelCommonsError, PROTOCOL_VERSION, validateCanonicalRequest,
   type DeviceProfile, type ModelCommonsRequest, type RuntimeProfile } from '@modelcommons/protocol';
 import { resolveRuntimeProfile } from '@modelcommons/device-profile';
 import { createLlamaRnRuntime, type LlamaRnRuntime, type LlamaRnSession } from '@modelcommons/runtime-llama-rn';
-import type { ModelResourceStore } from '@modelcommons/model-store';
+import type { ModelResourceStore, ResourceLease } from '@modelcommons/model-store';
+import type { ModelManifest } from '@modelcommons/protocol';
 
 export interface EmbeddedOptions {
   modelStore: ModelResourceStore;
@@ -13,6 +14,8 @@ export interface EmbeddedOptions {
   ownership: 'app-private' | 'shared-files';
   /** Opt-in GGUF metadata probe for an explicit synthetic diagnostic. */
   diagnosticModelInfo?: boolean;
+  /** Fired after verified acquisition, even if later profile/init fails. No URI. */
+  onResource?: (manifest: ModelManifest) => void;
   /** Metadata only; supplied by the application, never a global logger. */
   onLoad?: (value: { pending: boolean; modelId: string; profile: RuntimeProfile }) => Promise<void>;
 }
@@ -27,6 +30,8 @@ export function createEmbeddedLocalAI(options: EmbeddedOptions) {
   let closed = false;
   let poisoned = false;
   let closeAttempt: Promise<void> | undefined;
+  let orphanedLease: ResourceLease | undefined;
+  let unresolvedStoreCleanup = false;
   const engine = () => runtime ??= (options.runtimeFactory ?? createLlamaRnRuntime)();
   const host: InProcessHost = {
     protocolVersion: PROTOCOL_VERSION,
@@ -50,11 +55,17 @@ export function createEmbeddedLocalAI(options: EmbeddedOptions) {
         const availability = await engine().getAvailability();
         if (!availability.available) throw new ModelCommonsError('RUNTIME_UNAVAILABLE', 'The native text runtime is unavailable in this build.');
         const device = await options.deviceProvider();
-        const resource = await options.modelStore.acquire(model.manifest.id);
+        const resource = await options.modelStore.acquire(model.manifest.id).catch((error) => {
+          if (error instanceof ModelCommonsError && error.details?.resourceCleanupFailed === true) {
+            poisoned = true; unresolvedStoreCleanup = true;
+          }
+          throw error;
+        });
         let session: LlamaRnSession;
         let handedToRuntime = false;
         let profile: RuntimeProfile;
         try {
+          options.onResource?.(resource.manifest);
           if (resource.manifest.revision !== model.manifest.revision || resource.manifest.experimental) {
             throw new ModelCommonsError('MODEL_INCOMPATIBLE', 'Selected model revision is incompatible with this backend.');
           }
@@ -79,7 +90,11 @@ export function createEmbeddedLocalAI(options: EmbeddedOptions) {
           // Runtime owns the lease as soon as initialization is handed over.
           try {
             if (handedToRuntime) await engine().release();
-            else await resource.lease.release();
+            else {
+              orphanedLease = resource.lease;
+              await resource.lease.release();
+              orphanedLease = undefined;
+            }
           } catch { poisoned = true; }
           if (handedToRuntime) { poisoned = true; }
           throw error;
@@ -129,6 +144,9 @@ export function createEmbeddedLocalAI(options: EmbeddedOptions) {
         if (loading) { try { await loading; } catch { /* runtime cleanup below */ } }
         await active?.release();
         await runtime?.release();
+        await orphanedLease?.release();
+        orphanedLease = undefined;
+        if (unresolvedStoreCleanup) throw new ModelCommonsError('STORAGE_UNAVAILABLE', 'Model resource cleanup remains unresolved; restart the application.');
       })().catch((error) => { poisoned = true; throw error; });
       return closeAttempt;
     },

@@ -30,6 +30,7 @@ export interface NativeLeaseDescriptor {
   id: string;
   connectionId: string;
   uri: string;
+  coordinationVersion?: number;
 }
 
 export interface AndroidServiceInfo {
@@ -87,6 +88,8 @@ export interface AndroidHubModelSnapshot {
 }
 
 export interface ModelCommonsNativeModuleShape {
+  ownerAppGroupRoot?(): Promise<string>;
+  privateModelEvidence?(): Promise<{ downloadAttempts: number; importAttempts: number; artifactCount: number; artifactBytes: number }>;
   privateModelOperation?(operation: string, path: string, value: string): Promise<unknown>;
   downloadPrivateModel?(id: string, source: string, path: string, expected: number, origins: string[]): Promise<void>;
   importPrivateModel?(id: string, path: string, expected: number): Promise<void>;

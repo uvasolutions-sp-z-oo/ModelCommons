@@ -9,6 +9,9 @@ import { assertDownloadOrigin, snapshotPolicy, trustedManifest, type StorePolicy
 export interface ResourceLease {
   id: string;
   uri: string;
+  /** Optional lease-local access. Shared native ports must implement both. */
+  stat?(): Promise<{ size: number; regular: boolean } | null>;
+  sha256?(): Promise<string>;
   /** Stat the leased artifact without repeating checksum verification. */
   inspectFile?(): Promise<{ present: boolean; regular: boolean; sizeMatches: boolean }>;
   release(): Promise<void>;
@@ -263,10 +266,10 @@ function readyManifest(registry: ModelRegistry, policy: StorePolicy, id: string)
   if (!record) throw new ModelCommonsError('MODEL_NOT_READY', 'The selected model is not installed and ready.');
   return trustedManifest(policy, id, record.manifest);
 }
-async function verifyFile(port: ReadStorePort, path: string, file: ModelManifest['files'][number]) {
-  const info = await port.stat(path);
+async function verifyFile(port: ReadStorePort, path: string, file: ModelManifest['files'][number], lease?: ResourceLease) {
+  const info = await (lease?.stat ? lease.stat() : port.stat(path));
   if (!info?.regular || info.size !== file.sizeBytes || !file.integrity
-    || (await port.sha256(path)).toLowerCase() !== file.integrity.digest.toLowerCase()) {
+    || (await (lease?.sha256 ? lease.sha256() : port.sha256(path))).toLowerCase() !== file.integrity.digest.toLowerCase()) {
     throw new ModelCommonsError('INTEGRITY_FAILED', 'Model artifact failed size or integrity verification.');
   }
 }
@@ -274,21 +277,31 @@ async function acquireVerified(port: ReadStorePort, manifest: ModelManifest) {
   const file = manifest.files.find((item) => item.role === 'model' && item.required);
   if (!file) throw new ModelCommonsError('MODEL_NOT_READY', 'No required model artifact.');
   const lease = await port.acquire(artifactRelativePath(manifest, file.path));
+  const held = [lease];
   try {
     for (const item of manifest.files.filter((entry) => entry.required)) {
-      await verifyFile(port, artifactRelativePath(manifest, item.path), item);
+      const path = artifactRelativePath(manifest, item.path);
+      const artifactLease = item === file ? lease : await port.acquire(path);
+      if (artifactLease !== lease) held.push(artifactLease);
+      await verifyFile(port, path, item, artifactLease);
     }
     return {
       id: lease.id, uri: lease.uri,
-      release: () => lease.release(),
+      async release() { for (const resource of [...held].reverse()) await resource.release(); },
       async inspectFile() {
-        const info = await port.stat(artifactRelativePath(manifest, file.path));
+        const info = await (lease.stat ? lease.stat() : port.stat(artifactRelativePath(manifest, file.path)));
         return { present: info !== null, regular: info?.regular === true,
           sizeMatches: info?.size === file.sizeBytes };
       },
     };
   } catch (error) {
-    try { await lease.release(); } catch { /* preserve integrity failure */ }
+    let cleanupFailed = false;
+    for (const resource of held.reverse()) {
+      try { await resource.release(); } catch { cleanupFailed = true; }
+    }
+    if (cleanupFailed) throw new ModelCommonsError('STORAGE_UNAVAILABLE', 'Model resource cleanup failed; restart the application.', {
+      details: { resourceCleanupFailed: true },
+    });
     throw error;
   }
 }
@@ -304,16 +317,23 @@ export function createReadOnlyModelStore(port: ReadStorePort, input: StorePolicy
     if (text === null) throw new ModelCommonsError('MODEL_NOT_READY', 'No registry in the selected store.');
     return parseModelRegistry(parseBoundedMetadata(text));
   }
+  async function validateStoredManifest(manifest: ModelManifest) {
+    const stored = await port.readText(modelManifestRelativePath(manifest), LIMIT);
+    if (stored === null) throw new ModelCommonsError('MODEL_NOT_READY', 'Shared model manifest is missing.');
+    trustedManifest(policy, manifest.id, parseModelManifest(parseBoundedMetadata(stored)));
+  }
   return {
     identity: port.identity,
-    list: async () => readyPresent(port, await read(), policy),
+    list: async () => {
+      const models = await readyPresent(port, await read(), policy);
+      for (const manifest of models) await validateStoredManifest(manifest);
+      return models;
+    },
     acquire: async (id) => {
       const current = await read();
       const manifest = readyManifest(current, policy, id);
       assertLicenseAccepted(current, manifest);
-      const stored = await port.readText(modelManifestRelativePath(manifest), LIMIT);
-      if (stored === null) throw new ModelCommonsError('MODEL_NOT_READY', 'Shared model manifest is missing.');
-      trustedManifest(policy, id, parseModelManifest(parseBoundedMetadata(stored)));
+      await validateStoredManifest(manifest);
       return { manifest, lease: await acquireVerified(port, manifest) };
     },
   };

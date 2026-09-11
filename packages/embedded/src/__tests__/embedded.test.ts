@@ -8,7 +8,7 @@ import { createEmbeddedLocalAI } from '../index';
 import type { CreateLlamaRnSessionOptions } from '@modelcommons/runtime-llama-rn';
 
 afterEach(() => vi.unstubAllGlobals());
-function fixture(ownership: 'app-private' | 'shared-files', failLoad = false, diagnosticModelInfo = false) {
+function fixture(ownership: 'app-private' | 'shared-files', failLoad = false, diagnosticModelInfo = false, storeCleanupFailure = false) {
   const lifecycle: string[] = [];
   let serial = 0;
   let pendingLease: { release(): Promise<void> } | undefined;
@@ -48,25 +48,35 @@ function fixture(ownership: 'app-private' | 'shared-files', failLoad = false, di
     async list() { return [manifest]; },
     async acquire(id: string) {
       expect(id).toBe(manifest.id);
+      if (storeCleanupFailure) throw new ModelCommonsError('STORAGE_UNAVAILABLE', 'Synthetic cleanup failure', { details: { resourceCleanupFailed: true } });
       lifecycle.push('lease');
       return { manifest, lease: { id: `lease-${serial}`, uri: 'file:///synthetic/model.gguf',
         async release() { lifecycle.push('lease-release'); } } };
     },
   };
   const runtimeFactory = vi.fn(() => runtime as never);
+  const onResource = vi.fn();
   const backend = createEmbeddedLocalAI({ modelStore, ownership, runtimeFactory,
-    diagnosticModelInfo,
+    diagnosticModelInfo, onResource,
     policy: { maxContext: 1024, maxOutput: 128 },
     deviceProvider: async () => ({ schema: 'modelcommons.device-profile', schemaVersion: 1,
       protocolVersion: PROTOCOL_VERSION, platform: 'ios', physicalMemoryBytes: 8 * 1024 ** 3,
       availableMemoryBytes: 4 * 1024 ** 3, accelerators: [{ id: 'cpu', kind: 'cpu' }], runtimeVersions: {}, collectedAt: 1 }),
   });
-  return { backend, runtime, runtimeFactory, lifecycle };
+  return { backend, runtime, runtimeFactory, lifecycle, onResource };
 }
 const request = { model: { id: manifest.id, capabilities: ['text'] as ['text'] },
   messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Synthetic question' }] }], maxOutputTokens: 16 };
 
 describe.each(['app-private', 'shared-files'] as const)('%s composition without another inference boundary', (ownership) => {
+  it('does not report backend release after unresolved acquisition cleanup or admit another session', async () => {
+    const f = fixture(ownership, false, false, true);
+    const client = await ModelCommons.connect({ transport: f.backend.transport });
+    await expect(client.createSession({ capabilities: ['text'], modelId: manifest.id })).rejects.toMatchObject({ code: 'STORAGE_UNAVAILABLE' });
+    await expect(client.createSession({ capabilities: ['text'], modelId: manifest.id })).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' });
+    await expect(f.backend.release()).rejects.toMatchObject({ code: 'STORAGE_UNAVAILABLE' });
+    expect(f.runtime.createSession).not.toHaveBeenCalled();
+  });
   it.each([false, true])('forwards the explicit metadata probe opt-in: %s', async (enabled) => {
     const f = fixture(ownership, false, enabled);
     const client = await ModelCommons.connect({ transport: f.backend.transport });
@@ -103,6 +113,7 @@ describe.each(['app-private', 'shared-files'] as const)('%s composition without 
     const f = fixture(ownership, true);
     const client = await ModelCommons.connect({ transport: f.backend.transport });
     await expect(client.createSession({ capabilities: ['text'], modelId: manifest.id })).rejects.toMatchObject({ code: 'RUNTIME_INITIALIZATION_FAILED' });
+    expect(f.onResource).toHaveBeenCalledWith(manifest);
     expect(f.lifecycle).toContain('lease-release');
     await expect(client.createSession({ capabilities: ['text'], modelId: manifest.id })).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' });
     await f.backend.release();

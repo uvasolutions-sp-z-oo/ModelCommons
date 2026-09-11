@@ -4,6 +4,13 @@ This is an incomplete implementation checkpoint, not a release or verification r
 
 ## Workspace and authority
 
+2026-09-11 iOS follow-up: [current implementation and owner-run acceptance](verification/ios-shared-models.md)
+supersedes the iOS gap descriptions below. Files coordination, candidate validation
+and an explicit App Group writer now have source changes, still untested/unbuilt
+for this change. Android centralized inference remains unavailable. The current
+consumer checkout is `D:\GitHub\spm`; embedded device success reported by the owner
+does not establish cross-app reuse.
+
 The inspected Git roots are `D:\GitHub\ModelCommons` and `D:\GitHub\sales-pricing-extension-platform\sales-pricing-mobile`. Both are readable and explicitly writable in this session's permission configuration; this was not inferred from reads. Git administration directories and `.agents`/`.codex` remain read-only. No additional repository access is required for the working-tree edits. Repository renames/transfers do not determine local directory names; no remote was changed.
 
 Sales & Pricing's `.agents/AGENTS.md` declares repository-wide scope. The initial trees were inspected before edits. Existing business policy, authentication rules, model-free scenarios, identity, signing, model catalog digests, and the Hub's existing installed model were preserved. No app data was deleted. The Hub's old download/runtime path was not replaced wholesale.

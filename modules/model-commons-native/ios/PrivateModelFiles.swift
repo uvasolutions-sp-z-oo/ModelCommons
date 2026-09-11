@@ -10,6 +10,37 @@ final class PrivateModelFiles {
   private let lock = NSLock()
   private var downloads: [String: PrivateDownload] = [:]
   private var copies: [String: Bool] = [:]
+  private var downloadAttempts = 0
+  private var importAttempts = 0
+
+  /// Explicit synthetic owner test only. Does not create a private store or
+  /// return any file name/path. Counts include incomplete GGUF staging files.
+  func evidence() throws -> [String: Any] {
+    lock.lock()
+    let downloads = downloadAttempts, imports = importAttempts
+    lock.unlock()
+    let support = try manager.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                  appropriateFor: nil, create: false)
+    let base = support.appendingPathComponent("ModelCommonsPrivate", isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
+    var count = 0, bytes: Int64 = 0, visited = 0
+    if manager.fileExists(atPath: base.path) {
+      var enumerationFailed = false
+      guard let entries = manager.enumerator(at: base, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+        errorHandler: { _, _ in enumerationFailed = true; return false }) else { throw privateFailure() }
+      for case let entry as URL in entries {
+        visited += 1
+        guard visited <= 4096, entry.resolvingSymlinksInPath().path.hasPrefix(base.path + "/") else { throw privateFailure() }
+        if entry.lastPathComponent.lowercased().contains(".gguf") {
+          let values = try entry.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+          guard values.isRegularFile == true, let size = values.fileSize else { throw privateFailure() }
+          count += 1; bytes += Int64(size)
+        }
+      }
+      guard !enumerationFailed else { throw privateFailure() }
+    }
+    return ["downloadAttempts": downloads, "importAttempts": imports,
+            "artifactCount": count, "artifactBytes": bytes]
+  }
 
   private func root() throws -> URL {
     var url = try manager.url(for: .applicationSupportDirectory, in: .userDomainMask,
@@ -95,6 +126,7 @@ final class PrivateModelFiles {
 
   func download(id: String, source: String, path: String, expected: Double, origins: [String],
                 completion: @escaping (Error?) -> Void) throws {
+    lock.lock(); downloadAttempts += 1; lock.unlock()
     guard path.hasSuffix(".part"), expected > 0, expected <= 32 * 1024 * 1024 * 1024,
           let url = URL(string: source), id.utf8.count <= 128 else { throw privateFailure("INTEGRITY_FAILED") }
     let destination = try file(path)
@@ -112,6 +144,7 @@ final class PrivateModelFiles {
   /** Fresh picker source, streamed directly into staging. No persistent bookmark
    * or cache copy is retained for an app-contained import. */
   func copySelected(id: String, source: URL, path: String, expected: Double) throws {
+    lock.lock(); importAttempts += 1; lock.unlock()
     guard source.isFileURL, path.hasSuffix(".part"), id.utf8.count <= 128,
           expected > 0, expected <= 32 * 1024 * 1024 * 1024 else { throw privateFailure("INTEGRITY_FAILED") }
     let destination = try file(path)

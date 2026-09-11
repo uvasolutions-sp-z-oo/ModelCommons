@@ -21,6 +21,14 @@ function withIos(config, options) {
       return result;
     });
   }
+  config = withInfoPlist(config, (result) => {
+    result.modResults.ModelCommonsAppGroups = groups;
+    if (options.iosOwnerAppGroup) {
+      if (!groups.includes(options.iosOwnerAppGroup)) throw new Error('Owner App Group must be explicitly configured in iosAppGroups.');
+      result.modResults.ModelCommonsOwnerAppGroup = options.iosOwnerAppGroup;
+    } else delete result.modResults.ModelCommonsOwnerAppGroup;
+    return result;
+  });
   if (options.iosExposeDocumentsInFiles === true) {
     config = withInfoPlist(config, (result) => {
       result.modResults.LSSupportsOpeningDocumentsInPlace = true;

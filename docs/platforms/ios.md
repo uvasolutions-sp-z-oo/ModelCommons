@@ -1,126 +1,148 @@
-# iOS storage and runtime sharing
+# iOS shared model storage
 
-Status as of 2026-08-27: `@modelcommons/native` implements App Group and
-user-selected-directory connections, minimal bookmark persistence/stale refresh,
-canonical-root/symlink confinement, regular-file checks, SHA-256, opaque
-reference-counted leases, atomic app-owned replacement, optional JS lookup, and
-lifecycle teardown. `@modelcommons/runtime-llama-rn` accepts such a lease and
-releases it after the context. This code has not been built or verified on a
-signed physical device, and it does not implement cross-app inference.
+Source status, 2026-09-11: Files sharing and the optional App Group writer have
+implementation changes and owner-run tests. No tests, native compilation, signed
+builds, or two-app device checks were executed for this change. Existing embedded
+inference was reported working by the owner; cross-app reuse remains unverified.
+See [the implementation handoff and acceptance procedure](../verification/ios-shared-models.md).
 
-iOS does not provide a general, supported equivalent of an Android exported
-inference service. ModelCommons therefore draws a hard line between sharing
-storage and sharing execution.
+## Storage contract
 
-## Two designed storage relationships
+ModelCommons is an early Uva-designed protocol, not a ratified industry standard.
+A selected root contains `protocol.json`, `registry.json`, and
+`models/<immutable storageId>/manifest.json` plus manifest-declared artifacts.
+The generic reader validates versioned metadata against its own pinned catalog;
+a producer's checksum does not establish trust. Listing checks presence and size;
+acquisition validates manifest identity and every required artifact's full SHA-256.
+License gates remain in force. The first demonstration uses ungated SmolLM2.
 
-### Same developer team: App Group
+Files is the default: the Hub continues to write directly to
+`Documents/ModelCommons`. Select that exact folder in the consuming application's
+directory picker (`asCopy: false`). The folder containing both marker and registry
+is the reliable instruction; Files labels can vary. Parent folders are not searched.
+No model import, download, staging or model copy is part of shared consumption.
 
-Apps signed by the same developer team may use an App Group entitlement. Resolve
-the shared container only with
-`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`; a `nil`
-result is a configuration failure. Never guess or construct the container path.
+## Permission and provider boundary
 
-The entitlement, provisioning profiles, and App Store configuration must all be
-validated with signed physical-device builds. A simulator directory existing is
-not proof that production entitlements work.
+Only a native minimal bookmark and an opaque local connection ID are durable
+connection authority. The runtime receives a temporary lease URI. Paths, bookmarks
+and container IDs are not exported in diagnostics or portable configuration.
+Stale bookmarks refresh only after successful security-scope authorization.
+Invalid, cancelled or obsolete selection disposes of its candidate and preserves
+the selected connection. Disconnect removes the consumer grant, not the model.
 
-### Unrelated developers: user-selected directory
+The alpha admits direct sibling application `Documents/ModelCommons` roots below
+the current application's container parent, with a UUID application component.
+It canonicalizes symlinks and checks confinement before file coordination or reads.
+This conservative layout rule excludes third-party File Provider containers,
+iCloud, removable storage and unknown layouts, even if cached locally. It is not
+a public provider-identity API or an access grant. The picker/bookmark scope is
+still required. If iOS supplies a provider wrapper instead of the direct Documents
+root on a target device, that Files path is unsupported until separately evaluated;
+there is no hidden materialization fallback. No filesystem search is performed.
 
-For apps from unrelated teams, the documented path is explicit user selection
-through a document picker. Open a directory in place (`asCopy: false`), persist
-the resulting security-scoped URL as a minimal bookmark in app-private storage,
-and expect the bookmark to become stale or access to be revoked.
+Apple documents [directory access](https://developer.apple.com/documentation/uikit/providing-access-to-directories)
+and [coordinated reads](https://developer.apple.com/documentation/foundation/nsfilecoordinator/coordinate(readingitemat:options:error:byaccessor:)).
 
-On every use:
+## Lease lifetime and mutation
 
-1. resolve the bookmark and report staleness/revocation;
-2. call `startAccessingSecurityScopedResource()` and stop if it returns false;
-3. coordinate reads/writes where another process could be changing the file;
-4. resolve symlinks and prove the final path remains under the selected root;
-5. verify the selected artifact's expected size and SHA-256 immediately before
-   load; and
-6. balance every successful start with exactly one stop.
+`CoordinatedModelRead` keeps the original NSFileCoordinator accessor open on one
+dedicated worker per lease. Native admission is at most eight active or pending
+leases per connector. The reader rejects older native leases lacking the lifetime
+coordination version marker. Acquisition waits at most 15 seconds; timeout cancels the
+coordinator and marks the request stopped before a delayed accessor can activate.
+Pending workers retain their slot/scope until they exit. There is no lease expiry
+or stale-heartbeat rule that permits deletion while an app is suspended.
 
-JS receives opaque connection/lease IDs and a lease-scoped file URI, not bookmark
-bytes. The native connector stores bookmarks in the app's standard private user
-defaults. Products with a stronger at-rest requirement should review whether
-Keychain or additional data-protection policy is appropriate.
+Verification and pre-initialization stat use the artifact lease's accessor URL,
+without nested coordination or another lease. Required auxiliary artifacts are
+also retained. Ordering is acquisition, verification, URI normalization at the
+existing llama boundary, context creation, generation/cancellation, context teardown,
+then lease release. Release runs independently of acquisition and hashing queues.
+It signals the accessor, waits up to five seconds for actual exit, and reports
+failure if drain remains unresolved. Scope release happens after accessor exit.
+A failed native context teardown retains protection and denies unsafe reuse.
+Module teardown deliberately leaves outstanding workers/scopes alive; process
+exit is the ultimate recovery when explicit cleanup is lost. Hashing and native
+initialization are not instantly interruptible; cancellation after hashing is
+checked before starting a new context.
 
-The current connector does not yet wrap shared reads in `NSFileCoordinator`.
-Until coordination is added and tested, publishers must treat revisions as
-immutable and never replace a file while another process may hold a lease.
+Cooperative writers wait until the read ends, including moves/deletions covered by
+coordination. Hub metadata replacement now coordinates its atomic publication.
+Published GGUFs are immutable and never overwritten; iOS Hub deletion remains
+deferred. Do not modify a live production model through Files.
 
-## Access lease and mmap lifetime
+Coordination is cooperative, not an OS-wide mandatory lock. The stat, hash and
+llama loader still open a pathname; the SDK does not pass an already-open file
+descriptor into llama. An authorized writer ignoring coordination can replace,
+truncate or change bytes between checks and load or during inference. This is
+not tamper-proof storage. Native worker tests cannot establish real mmap/device
+behavior or security-scope grant persistence.
 
-Security-scoped access must outlive every file descriptor, mmap, model, and
-llama context that depends on it. Use a reference-counted native lease:
+## Optional same-team App Group ownership
 
-```text
-resolve bookmark -> start access -> verify -> initialize model/context
-generate/cancel as needed
-release context/model -> close mappings/descriptors -> stop access
+Set `MODELCOMMONS_APP_GROUP` to a registered group and explicitly select
+`MODELCOMMONS_IOS_STORE=app-group` for the Hub build. Without that selection,
+existing installs use Documents, even if an entitlement exists. The native resolver
+uses `containerURL(forSecurityApplicationGroupIdentifier:)` and accepts only the
+configured owner group. Missing/unavailable group access fails explicitly.
+The hashing/atomic-write allowlist extends only to that group's `ModelCommons`
+child. Existing Expo filesystem permission code includes entitled App Group roots.
+
+Downloads, publication and Hub local inference all use the selected destination.
+No existing files are copied or migrated, including legacy donor models. Existing
+Documents files remain allocated and must not be counted as shared savings.
+S&P's counterpart is `localAI.appGroup` in `config/apps/<variant>.json`; there is
+no matching S&P environment variable in current source. Both apps require the
+same team, associated app IDs, matching provisioning profiles and new binaries.
+The SDK consumer API is read-only; an entitled peer may have broader OS write
+access. See Apple's [App Groups documentation](https://developer.apple.com/documentation/xcode/configuring-app-groups).
+
+## Execution and privacy
+
+Generic client setup uses the same SDK composition as S&P (policy and device
+provider are supplied by the integrating app):
+
+```ts
+const connection = await connectSharedDirectory();
+const store = createReadOnlyModelStore(createSharedStorePort(connection.id), trustedPolicy);
+try {
+  await store.list(); // Validate before replacing the app's saved connection ID.
+} catch (error) {
+  await disconnectSharedDirectory(connection.id);
+  throw error;
+}
+const backend = createEmbeddedLocalAI({ modelStore: store, ownership: 'shared-files',
+  deviceProvider, policy: { maxContext: 1024, maxOutput: 128 } });
+try {
+  const client = await ModelCommons.connect({ transport: backend.transport });
+  const session = await client.createSession({ capabilities: ['text'], modelId: approvedModelId });
+  // Use session.generate/stream with canonical text requests and an AbortSignal.
+  // backend.release below drains the owned session/context before its file lease.
+} finally {
+  await backend.release(); // Propagate failure; deny further work if cleanup fails.
+}
 ```
 
-Stopping scope after initialization while retaining an mmap is invalid lifecycle
-management. Conversely, leaking access leases will eventually exhaust the
-process's limited security-scope resources.
+Imports come from `@modelcommons/native`, `@modelcommons/model-store`,
+`@modelcommons/embedded` and `@modelcommons/client`. The app stores only the
+validated connection's opaque ID, owns its cancellation/identity boundary, and
+supplies independently trusted model manifests. It must not add fallback or a
+private provisioning call to a shared request.
 
-## What sharing a directory does not do
+Storage owner is the shared store; execution owner is the consuming application.
+Each app creates its own llama context, KV cache and allocations. No shared iOS
+inference daemon or RAM deduplication is claimed. Android centralized execution
+remains a separate task.
 
-Sharing a GGUF avoids a second on-disk copy. It does **not** share a llama
-context, KV cache, memory mapping, RAM, GPU allocation, inference queue, or
-license acceptance between unrelated applications. Each unrelated iOS client
-that performs inference needs its own optional native runtime and enough memory.
+The current Hub source writes model metadata/artifacts to Documents; chat,
+preferences and approval UI state use their existing private persistence, and
+reporting does not add Documents exports. The legacy model migration is the
+other Documents consumer. Existing user-created or old-version Documents files
+cannot be audited from source; the owner must inspect the test installation.
+S&P's Documents area is not exposed by its native plugin configuration.
 
-App Group peers can coordinate files, but ModelCommons does not claim a
-persistent cross-app inference daemon. Background execution, loopback servers,
-VPN tricks, undocumented IPC, and extensions kept alive outside their supported
-purpose are not accepted substitutes.
-
-## Current configuration and normalized failures
-
-The Hub config accepts an App Group through `MODELCOMMONS_APP_GROUP`; no hardcoded
-group is shipped. The root [`.env.example`](../../.env.example) documents this
-optional build-time value. The plugin also enables opening documents in place.
-The native availability flag means connector code exists, not that an
-entitlement or shared directory connection has been established.
-
-The iOS device snapshot reports `ProcessInfo.physicalMemory` and a CPU baseline,
-but intentionally omits an available-memory estimate because the module has no
-defensible stable allocation budget. Unknown available memory remains unknown in
-the resolver. The Hub adds a llama.rn version only after adapter availability.
-
-The public JavaScript wrappers normalize native/Expo rejections into
-`ModelCommonsError`. A trusted leading stable protocol code is retained (with
-`RUNTIME_NOT_READY` mapped to `RUNTIME_UNAVAILABLE`); untrusted localized text
-and raw causes are discarded in favor of bounded operation-specific messages.
-Representative behavior is:
-
-- Missing native module: `RUNTIME_UNAVAILABLE`.
-- App Group unavailable or user selection not granted: `PERMISSION_REQUIRED`.
-- Connection listing/removal or lease acquisition/release failure:
-  `STORAGE_UNAVAILABLE`; stale or revoked bookmarks require explicit
-  re-selection.
-- Hash failure or host-detected size/SHA mismatch: `INTEGRITY_FAILED`; do not
-  load. Path confinement is enforced before a lease is returned.
-- No compatible local runtime: `RUNTIME_UNAVAILABLE` or
-  `UNSUPPORTED_PLATFORM`, never a silent network request.
-- Memory pressure or termination: release the context and scope, remember a
-  non-sensitive failure category, and recommend a safer profile on next load.
-
-## Verification gate
-
-See [Physical-device verification](../verification/physical-devices.md). Test an
-App Store-like signed build, fresh install, upgrade, revoked access, moved folder,
-stale bookmark, protected-data lock state, background/foreground transitions,
-memory pressure, cancellation, and reinstall. Run separate same-team App Group
-and unrelated-developer document-picker scenarios; they are not interchangeable.
-
-## Primary references
-
-- [Configuring App Groups](https://developer.apple.com/documentation/xcode/configuring-app-groups)
-- [App Group entitlement](https://developer.apple.com/documentation/BundleResources/Entitlements/com.apple.security.application-groups)
-- [`containerURL(forSecurityApplicationGroupIdentifier:)`](https://developer.apple.com/documentation/foundation/filemanager/containerurl(forsecurityapplicationgroupidentifier:))
-- [Providing access to directories](https://developer.apple.com/documentation/uikit/providing-access-to-directories)
-- [`startAccessingSecurityScopedResource`](https://developer.apple.com/documentation/foundation/nsurl/startaccessingsecurityscopedresource())
+S&P diagnostic report v4 adds observed shared acquisition, verified artifact
+metadata, transport and bounded SDK-private GGUF inventory/call counters. It
+exports no content, filenames, URLs, bookmarks or physical file identifiers.
+Measurements are null when unavailable. See the handoff for their exact limits.

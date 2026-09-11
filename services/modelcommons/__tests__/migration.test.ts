@@ -72,6 +72,7 @@ const memory = vi.hoisted(() => {
 });
 
 vi.mock('expo-file-system/legacy', () => memory.api);
+vi.mock('expo-constants', () => ({ default: { expoConfig: {} } }));
 vi.mock('react-native', () => ({ NativeModules: {}, Platform: { OS: 'android' } }));
 vi.mock('@modelcommons/native', () => ({
   hasNativeMethod: (name: string) => name === 'atomicReplaceFile',

@@ -112,10 +112,12 @@ public final class ModelCommonsNativeModule: Module {
         defer { self.pickerDelegate = nil }
         switch result {
         case .success(let url):
-          do {
-            promise.resolve(try self.connector.createSecurityScopedConnection(url: url).dictionary())
-          } catch {
-            promise.reject("ERR_MODELCOMMONS_BOOKMARK", error.localizedDescription)
+          DispatchQueue.global(qos: .utility).async {
+            do {
+              promise.resolve(try self.connector.createSecurityScopedConnection(url: url).dictionary())
+            } catch {
+              promise.reject("ERR_MODELCOMMONS_BOOKMARK", error.localizedDescription)
+            }
           }
         case .failure(let error):
           promise.reject("ERR_MODELCOMMONS_PICKER", error.localizedDescription)
@@ -140,15 +142,15 @@ public final class ModelCommonsNativeModule: Module {
 
     AsyncFunction("acquireModelLease") { (connectionId: String, relativePath: String) in
       try self.connector.acquire(connectionId: connectionId, relativePath: relativePath).dictionary()
-    }
+    }.runOnQueue(DispatchQueue.global(qos: .utility))
 
     AsyncFunction("releaseModelLease") { (leaseId: String) in
       try self.connector.release(leaseId: leaseId)
-    }
+    }.runOnQueue(DispatchQueue.global(qos: .userInitiated))
 
     AsyncFunction("sha256Lease") { (leaseId: String) in
       try self.connector.sha256(leaseId: leaseId)
-    }
+    }.runOnQueue(DispatchQueue.global(qos: .utility))
 
     AsyncFunction("readLeaseMetadata") { (leaseId: String) in
       try self.connector.readMetadata(leaseId: leaseId)
@@ -157,6 +159,14 @@ public final class ModelCommonsNativeModule: Module {
     AsyncFunction("statLease") { (leaseId: String) in
       try self.connector.stat(leaseId: leaseId)
     }
+
+    AsyncFunction("ownerAppGroupRoot") {
+      try self.connector.ownerAppGroupRoot()
+    }
+
+    AsyncFunction("privateModelEvidence") {
+      try self.privateFiles.evidence()
+    }.runOnQueue(DispatchQueue.global(qos: .utility))
 
     AsyncFunction("sha256File") { (uri: String) in
       try self.connector.sha256ManagedFile(uri: uri)

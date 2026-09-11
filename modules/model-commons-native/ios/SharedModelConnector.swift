@@ -12,6 +12,7 @@ enum SharedModelConnectorError: LocalizedError {
   case unknownLease
   case unmanagedPath
   case invalidFileURL
+  case invalidMetadata
 
   var errorDescription: String? {
     switch self {
@@ -25,6 +26,7 @@ enum SharedModelConnectorError: LocalizedError {
     case .unknownLease: return "PERMISSION_REQUIRED: Model file lease is unknown or already released."
     case .unmanagedPath: return "PERMISSION_REQUIRED: File operation is outside the authorized model area."
     case .invalidFileURL: return "INTEGRITY_FAILED: Only local file URLs are accepted."
+    case .invalidMetadata: return "INTEGRITY_FAILED: Shared metadata is invalid or too large."
     }
   }
 }
@@ -60,7 +62,7 @@ struct ModelLeaseDescriptor {
   let url: URL
 
   func dictionary() -> [String: Any] {
-    ["id": id, "connectionId": connectionId, "uri": url.absoluteString]
+    ["id": id, "connectionId": connectionId, "uri": url.absoluteString, "coordinationVersion": 1]
   }
 }
 
@@ -75,6 +77,7 @@ final class SharedModelConnector {
   private struct LeaseRecord {
     let connectionId: String
     let url: URL
+    let read: CoordinatedModelRead
   }
 
   private let fileManager = FileManager.default
@@ -84,6 +87,7 @@ final class SharedModelConnector {
   private var activeRoots: [String: ActiveRoot] = [:]
   private var leases: [String: LeaseRecord] = [:]
   private var ioPins: [String: Int] = [:]
+  private var releasing = Set<String>()
 
   init() {
     if let data = defaults.data(forKey: Self.connectionsKey),
@@ -100,6 +104,7 @@ final class SharedModelConnector {
       throw SharedModelConnectorError.accessDenied
     }
     defer { url.stopAccessingSecurityScopedResource() }
+    try Self.validateLocalDocumentsRoot(url)
     let values = try url.resourceValues(forKeys: [.isDirectoryKey])
     guard values.isDirectory == true else { throw SharedModelConnectorError.notDirectory }
     let bookmark = try url.bookmarkData(
@@ -110,7 +115,7 @@ final class SharedModelConnector {
     let descriptor = SharedConnectionDescriptor(
       id: UUID().uuidString,
       kind: .securityScoped,
-      displayName: url.lastPathComponent.isEmpty ? "ModelCommons" : url.lastPathComponent,
+      displayName: "ModelCommons (Files)",
       bookmarkBase64: bookmark.base64EncodedString(),
       groupIdentifier: nil
     )
@@ -122,14 +127,14 @@ final class SharedModelConnector {
   }
 
   func createAppGroupConnection(groupIdentifier: String) throws -> SharedConnectionDescriptor {
-    guard groupIdentifier.hasPrefix("group."),
+    guard Self.configuredGroups.contains(groupIdentifier),
           let root = fileManager.containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier) else {
       throw SharedModelConnectorError.invalidGroup
     }
     let descriptor = SharedConnectionDescriptor(
       id: UUID().uuidString,
       kind: .appGroup,
-      displayName: root.lastPathComponent,
+      displayName: "ModelCommons (App Group)",
       bookmarkBase64: nil,
       groupIdentifier: groupIdentifier
     )
@@ -156,9 +161,31 @@ final class SharedModelConnector {
   }
 
   func acquire(connectionId: String, relativePath: String) throws -> ModelLeaseDescriptor {
+    let descriptor = try reserve(connectionId: connectionId, relativePath: relativePath)
+    lock.lock()
+    let record = leases[descriptor.id]!
+    let root = activeRoots[connectionId]!.url
+    lock.unlock()
+    record.read.start(url: record.url, validate: { url in
+      guard Self.isDescendant(Self.canonical(url), of: root) else {
+        throw SharedModelConnectorError.unmanagedPath
+      }
+      let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isUbiquitousItemKey])
+      guard values.isUbiquitousItem != true else { throw SharedModelConnectorError.accessDenied }
+      guard values.isRegularFile == true else { throw SharedModelConnectorError.notRegularFile }
+    }, finished: { self.finishLease(leaseId: descriptor.id) })
+    let url = try record.read.awaitURL()
+    lock.lock()
+    leases[descriptor.id] = LeaseRecord(connectionId: connectionId, url: url, read: record.read)
+    lock.unlock()
+    return ModelLeaseDescriptor(id: descriptor.id, connectionId: connectionId, url: url)
+  }
+
+  private func reserve(connectionId: String, relativePath: String) throws -> ModelLeaseDescriptor {
     try Self.validateRelativePath(relativePath)
     lock.lock()
     defer { lock.unlock() }
+    guard leases.count < 8 else { throw SharedModelConnectorError.activeLeases }
     guard var connection = connections[connectionId] else {
       throw SharedModelConnectorError.invalidConnection
     }
@@ -171,6 +198,7 @@ final class SharedModelConnector {
       switch connection.kind {
       case .appGroup:
         guard let group = connection.groupIdentifier,
+              Self.configuredGroups.contains(group),
               let groupRoot = fileManager.containerURL(forSecurityApplicationGroupIdentifier: group) else {
           throw SharedModelConnectorError.invalidGroup
         }
@@ -194,6 +222,7 @@ final class SharedModelConnector {
         newlyStarted = true
         root = Self.canonical(resolvedURL)
         do {
+          try Self.validateLocalDocumentsRoot(resolvedURL)
           if stale {
             let refreshed = try resolvedURL.bookmarkData(
               options: .minimalBookmark,
@@ -222,7 +251,7 @@ final class SharedModelConnector {
       guard values.isUbiquitousItem != true else { throw SharedModelConnectorError.accessDenied }
       guard values.isRegularFile == true else { throw SharedModelConnectorError.notRegularFile }
       let leaseId = UUID().uuidString
-      leases[leaseId] = LeaseRecord(connectionId: connectionId, url: modelURL)
+      leases[leaseId] = LeaseRecord(connectionId: connectionId, url: modelURL, read: CoordinatedModelRead())
       var active = activeRoots[connectionId]!
       active.leaseCount += 1
       activeRoots[connectionId] = active
@@ -239,11 +268,24 @@ final class SharedModelConnector {
 
   func release(leaseId: String) throws {
     lock.lock()
+    guard (ioPins[leaseId] ?? 0) == 0 else {
+      lock.unlock(); throw SharedModelConnectorError.activeLeases
+    }
+    let read = leases[leaseId]?.read
+    if read != nil { releasing.insert(leaseId) }
+    lock.unlock()
+    // Idempotent after successful worker cleanup; never stop a scope here.
+    try read?.release()
+  }
+
+  private func finishLease(leaseId: String) {
+    lock.lock()
     defer { lock.unlock() }
-    guard (ioPins[leaseId] ?? 0) == 0 else { throw SharedModelConnectorError.activeLeases }
+    ioPins.removeValue(forKey: leaseId)
+    releasing.remove(leaseId)
     guard let lease = leases.removeValue(forKey: leaseId),
           var root = activeRoots[lease.connectionId] else {
-      throw SharedModelConnectorError.unknownLease
+      return
     }
     root.leaseCount = max(0, root.leaseCount - 1)
     if root.leaseCount == 0 {
@@ -264,7 +306,7 @@ final class SharedModelConnector {
       defer { try? handle.close() }
       let data = try handle.read(upToCount: 1024 * 1024 + 1) ?? Data()
       guard data.count <= 1024 * 1024, let text = String(data: data, encoding: .utf8) else {
-        throw SharedModelConnectorError.invalidConnection
+        throw SharedModelConnectorError.invalidMetadata
       }
       return text
     }
@@ -281,7 +323,7 @@ final class SharedModelConnector {
 
   private func withLeaseRead<T>(_ leaseId: String, read: (URL) throws -> T) throws -> T {
     lock.lock()
-    guard let lease = leases[leaseId], let root = activeRoots[lease.connectionId],
+    guard !releasing.contains(leaseId), let lease = leases[leaseId], let root = activeRoots[lease.connectionId],
           Self.isDescendant(Self.canonical(lease.url), of: root.url) else {
       lock.unlock(); throw SharedModelConnectorError.unknownLease
     }
@@ -290,18 +332,9 @@ final class SharedModelConnector {
     defer {
       lock.lock(); ioPins[leaseId, default: 1] -= 1; lock.unlock()
     }
-    var coordinationError: NSError?
-    var result: Result<T, Error>?
-    NSFileCoordinator().coordinate(readingItemAt: lease.url, options: .withoutChanges,
-      error: &coordinationError) { url in
-      result = Result {
-        guard Self.isDescendant(Self.canonical(url), of: root.url) else { throw SharedModelConnectorError.unmanagedPath }
-        return try read(url)
-      }
-    }
-    if let coordinationError { throw coordinationError }
-    guard let result else { throw SharedModelConnectorError.accessDenied }
-    return try result.get()
+    // The original accessor is still open. Nesting another coordination here
+    // can deadlock behind a waiting writer. Use the accessor-provided URL.
+    return try read(lease.url)
   }
 
   func sha256ManagedFile(uri: String) throws -> String {
@@ -319,6 +352,20 @@ final class SharedModelConnector {
     guard isOwnerModelPath(staged), isOwnerModelPath(destination) else {
       throw SharedModelConnectorError.unmanagedPath
     }
+    var coordinationError: NSError?
+    var result: Result<Void, Error>?
+    NSFileCoordinator().coordinate(writingItemAt: destination, options: .forReplacing, error: &coordinationError) { coordinated in
+      result = Result {
+        guard Self.canonical(coordinated) == destination else { throw SharedModelConnectorError.unmanagedPath }
+        try self.replaceOwnerFile(staged: staged, destination: destination)
+      }
+    }
+    if let coordinationError { throw coordinationError }
+    guard let result else { throw SharedModelConnectorError.accessDenied }
+    try result.get()
+  }
+
+  private func replaceOwnerFile(staged: URL, destination: URL) throws {
     let stagedValues = try staged.resourceValues(forKeys: [.isRegularFileKey])
     guard stagedValues.isRegularFile == true else { throw SharedModelConnectorError.notRegularFile }
     if fileManager.fileExists(atPath: destination.path) {
@@ -359,8 +406,13 @@ final class SharedModelConnector {
   private func isOwnerModelPath(_ input: URL) -> Bool {
     let url = Self.canonical(input)
     let home = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
-    let roots = [home.appendingPathComponent("Documents/ModelCommons", isDirectory: true),
+    var roots = [home.appendingPathComponent("Documents/ModelCommons", isDirectory: true),
                  home.appendingPathComponent("Library/Application Support/ModelCommonsPrivate", isDirectory: true)]
+    if let group = Bundle.main.object(forInfoDictionaryKey: "ModelCommonsOwnerAppGroup") as? String,
+       Self.configuredGroups.contains(group),
+       let groupRoot = fileManager.containerURL(forSecurityApplicationGroupIdentifier: group) {
+      roots.append(groupRoot.appendingPathComponent("ModelCommons", isDirectory: true))
+    }
     return roots.contains { Self.isDescendant(url, of: Self.canonical($0)) }
   }
 
@@ -380,7 +432,41 @@ final class SharedModelConnector {
     defaults.set(data, forKey: Self.connectionsKey)
   }
 
-  private static func validateRelativePath(_ value: String) throws {
+  private static var configuredGroups: [String] {
+    Bundle.main.object(forInfoDictionaryKey: "ModelCommonsAppGroups") as? [String] ?? []
+  }
+
+  func ownerAppGroupRoot() throws -> String {
+    guard let group = Bundle.main.object(forInfoDictionaryKey: "ModelCommonsOwnerAppGroup") as? String,
+          Self.configuredGroups.contains(group),
+          let container = fileManager.containerURL(forSecurityApplicationGroupIdentifier: group) else {
+      throw SharedModelConnectorError.invalidGroup
+    }
+    return container.appendingPathComponent("ModelCommons", isDirectory: true).absoluteString
+  }
+
+  /// Conservative alpha admission, BEFORE coordinating or opening metadata.
+  /// Direct sibling application Documents/ModelCommons only. Cloud and third-
+  /// party provider containers (including locally cached ones) fail closed.
+  /// This is a layout restriction, not a provider identity API or authority grant.
+  private static func validateLocalDocumentsRoot(_ url: URL) throws {
+    let candidate = canonical(url)
+    let applications = canonical(URL(fileURLWithPath: NSHomeDirectory())).deletingLastPathComponent()
+    guard url.isFileURL, isDescendant(candidate, of: applications) else {
+      throw SharedModelConnectorError.accessDenied
+    }
+    let suffix = Array(candidate.pathComponents.dropFirst(applications.pathComponents.count))
+    guard suffix.count == 3, UUID(uuidString: suffix[0]) != nil,
+          suffix[1] == "Documents", suffix[2] == "ModelCommons" else {
+      throw SharedModelConnectorError.accessDenied
+    }
+    let values = try candidate.resourceValues(forKeys: [.isDirectoryKey, .isUbiquitousItemKey])
+    guard values.isDirectory == true, values.isUbiquitousItem != true else {
+      throw SharedModelConnectorError.accessDenied
+    }
+  }
+
+  static func validateRelativePath(_ value: String) throws {
     guard !value.isEmpty,
           value.utf8.count <= 1024,
           !value.hasPrefix("/"),
@@ -399,7 +485,7 @@ final class SharedModelConnector {
     url.standardizedFileURL.resolvingSymlinksInPath()
   }
 
-  private static func isDescendant(_ candidate: URL, of root: URL) -> Bool {
+  static func isDescendant(_ candidate: URL, of root: URL) -> Bool {
     let rootPath = canonical(root).path.hasSuffix("/") ? canonical(root).path : canonical(root).path + "/"
     return canonical(candidate).path.hasPrefix(rootPath)
   }
