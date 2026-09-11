@@ -34,6 +34,7 @@ import {
 
 const STORE_DIRECTORY = 'ModelCommons';
 const LEGACY_DIRECTORY = 'models';
+import { beginAndroidHubMutation, endAndroidHubMutation } from '@modelcommons/native';
 const REGISTRY_FILE = 'registry.json';
 const PROTOCOL_FILE = 'protocol.json';
 const DOWNLOAD_MANIFEST_FILE = 'download-manifest.json';
@@ -537,6 +538,7 @@ export class ModelStore {
         throw new ModelCommonsError('USER_CANCELLED', 'Model download was cancelled.');
       }
 
+      if (Platform.OS === 'android') await beginAndroidHubMutation();
       try {
         await this.#assertDownloadSpace(manifest);
         await ensureDirectory(this.#modelDirectory(manifest));
@@ -583,6 +585,8 @@ export class ModelStore {
           failureCode: converted.code,
         }));
         throw converted;
+      } finally {
+        if (Platform.OS === 'android') await endAndroidHubMutation();
       }
     });
   }
@@ -595,12 +599,17 @@ export class ModelStore {
       }
       const record = this.#registry.models.find((entry) => entry.manifest.id === modelId);
       if (!record) return this.#registry;
-      await this.#beforeDelete?.(modelId);
-      const directory = this.#modelDirectory(record.manifest);
-      await FileSystem.deleteAsync(directory, { idempotent: true });
-      this.#verifiedRevisions.delete(this.#revisionKey(record.manifest));
-      await this.#publishRegistry(removeModelRecord(this.#registry, record.manifest));
-      return this.#registry;
+      if (Platform.OS === 'android') await beginAndroidHubMutation();
+      try {
+        await this.#beforeDelete?.(modelId);
+        const directory = this.#modelDirectory(record.manifest);
+        await FileSystem.deleteAsync(directory, { idempotent: true });
+        this.#verifiedRevisions.delete(this.#revisionKey(record.manifest));
+        await this.#publishRegistry(removeModelRecord(this.#registry, record.manifest));
+        return this.#registry;
+      } finally {
+        if (Platform.OS === 'android') await endAndroidHubMutation();
+      }
     });
   }
 

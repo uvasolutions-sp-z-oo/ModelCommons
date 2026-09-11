@@ -24,6 +24,10 @@ import { modelStore } from './modelStore';
 import { createHubAvailableModels, selectHubTextRecord } from './selection';
 import { registerHubTransport } from './inference';
 import { useHubStore } from '../../store/inferenceStore';
+import { Platform } from 'react-native';
+import { androidHostAvailability, createAndroidBinderTransport } from '@modelcommons/native';
+
+let broker: Awaited<ReturnType<typeof createAndroidBinderTransport>> | undefined;
 
 let runtime = createLlamaRnRuntime({ maxLoadedContexts: 1 });
 let transport: InProcessTransport | undefined;
@@ -139,10 +143,22 @@ class HubHost implements InProcessHost {
 }
 
 export async function initializeHubRuntime(): Promise<InProcessTransport> {
-  if (transport) return transport;
+  if (transport) {
+    if (Platform.OS !== 'android' || (await transport.getAvailability()).state === 'AVAILABLE') return transport;
+    transport = undefined;
+  }
   if (!transportInitialization) {
     transportInitialization = (async () => {
       await modelStore.initialize();
+      if (Platform.OS === 'android') {
+        const owner = await androidHostAvailability();
+        if (!owner.available) throw new ModelCommonsError('RUNTIME_UNAVAILABLE', 'This Hub build has no Android CPU worker.');
+        broker = await createAndroidBinderTransport({ packageName: owner.packageName, trustedCertificateSha256: [] });
+        transport = broker.transport;
+        registerHubTransport(transport);
+        ModelCommons.configureDefaultTransport(() => initializeHubRuntime());
+        return transport;
+      }
       const nextTransport = new InProcessTransport(new HubHost(), {
         aliases: modelStore.registry.aliases,
       });
@@ -164,11 +180,21 @@ export async function initializeHubRuntime(): Promise<InProcessTransport> {
   return transportInitialization!;
 }
 
-export function getHubRuntimeAvailability() {
+export async function getHubRuntimeAvailability(): Promise<{ available: boolean; runtimeId: string; runtimeVersion: string; message?: string; reason?: string }> {
+  if (Platform.OS === 'android') {
+    const owner = await androidHostAvailability();
+    return { ...owner, reason: owner.available ? undefined : 'RUNTIME_UNAVAILABLE' };
+  }
   return runtime.getAvailability();
 }
 
 async function providerAliases(): Promise<Record<string, ModelAliasTarget>> {
+  if (Platform.OS === 'android') {
+    const models = await (await initializeHubRuntime()).listModels();
+    const ready = models.find((model) => model.state === 'READY');
+    return ready ? Object.fromEntries(['modelcommons:auto', 'modelcommons:best-text', 'modelcommons:offline']
+      .map((alias) => [alias, { modelId: ready.manifest.id, profile: 'safe' }])) : {};
+  }
   await initializeHubRuntime();
   const availability = await runtime.getAvailability();
   const state = useHubStore.getState();
@@ -198,6 +224,14 @@ async function providerAliases(): Promise<Record<string, ModelAliasTarget>> {
 function providerBackend(): OpenAIBackend & AnthropicBackend {
   return {
     async listModels() {
+      if (Platform.OS === 'android') {
+        return (await (await initializeHubRuntime()).listModels()).map((model) => ({
+          id: model.manifest.id, createdAt: 0, capabilities: ['text'] as ['text'],
+          state: 'ready' as const, profileId: 'safe', runtimeId: 'modelcommons.android.cpu',
+          features: { streaming: true, stopSequences: false, temperature: true, topP: true,
+            tools: false, strictTools: false, parallelTools: false, jsonObject: false, jsonSchema: false },
+        }));
+      }
       await initializeHubRuntime();
       const availability = await runtime.getAvailability();
       const models = createHubAvailableModels(modelStore.registry, {
@@ -294,6 +328,9 @@ export function createHubAnthropicFetch() {
 }
 
 export async function releaseHubRuntime(): Promise<void> {
+  if (Platform.OS === 'android') {
+    await broker?.disconnect(); broker = undefined; transport = undefined; return;
+  }
   await runtime.release();
   runtime = createLlamaRnRuntime({ maxLoadedContexts: 1 });
   transport = undefined;

@@ -22,6 +22,8 @@ export async function streamHubChat(options: {
   signal?: AbortSignal;
   onText: (completeText: string) => void;
 }): Promise<{ text: string; modelId: string; modelRevision: string; runtimeId: string }> {
+  // Reconnect the Hub's own bound client after a foreground transition.
+  await (await import('./hubRuntime')).initializeHubRuntime();
   if (!localTransport) {
     throw new ModelCommonsError('RUNTIME_UNAVAILABLE', 'The local llama.rn runtime is not registered in this build.');
   }

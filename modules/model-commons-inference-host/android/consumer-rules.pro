@@ -1,0 +1,3 @@
+-keep class org.modelcommons.host.NativeInferenceHost { *; }
+-keep class org.modelcommons.host.NativeWorker { *; }
+-keep class org.modelcommons.host.TokenSink { *; }

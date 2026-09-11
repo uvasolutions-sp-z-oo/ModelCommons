@@ -12,8 +12,10 @@ interface IModelCommonsService {
   String getProtocolVersion();
   CapabilitiesParcel getCapabilities();
   ModelPageParcel listModels(String cursor, int limit);
-  SessionResultParcel createSession(String modelId, String profileId);
+  SessionResultParcel createSession(String modelId, String profileId, String protocolVersion, int contextSize, int maxOutputTokens, IBinder lifetime);
   OperationResultParcel generate(String sessionId, in GenerateRequestParcel request, IModelCommonsCallback callback);
   OperationResultParcel cancel(String sessionId, String requestId);
   OperationResultParcel releaseSession(String sessionId);
+  OperationResultParcel acknowledge(String sessionId, String requestId, long sequence);
+  boolean isSessionDrained(String sessionId);
 }

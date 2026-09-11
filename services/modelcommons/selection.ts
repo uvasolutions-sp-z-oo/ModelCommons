@@ -7,9 +7,11 @@ import {
   type ModelRegistryRecord,
 } from '@modelcommons/protocol';
 import { isRuntimeVersionAtLeast, resolveRuntimeProfile } from '@modelcommons/device-profile';
+import { SMOLLM2_135M_INSTRUCT, SMOLLM2_360M_INSTRUCT } from '@modelcommons/model-store/catalog';
 
 export interface HubExecutionPolicy {
   runtimeAvailable: boolean;
+  runtimeId?: string;
   runtimeVersion?: string;
   experimentalEnabled: boolean;
   deviceProfile?: DeviceProfile;
@@ -31,9 +33,11 @@ export function isRegistryLicenseAccepted(
 
 function supportsAvailableLlamaRuntime(
   manifest: ModelManifest,
-  policy: Pick<HubExecutionPolicy, 'runtimeAvailable' | 'runtimeVersion'>
+  policy: Pick<HubExecutionPolicy, 'runtimeAvailable' | 'runtimeVersion' | 'runtimeId'>
 ): boolean {
   if (!policy.runtimeAvailable || !policy.runtimeVersion) return false;
+  if (policy.runtimeId === 'modelcommons.android.cpu') return [SMOLLM2_135M_INSTRUCT, SMOLLM2_360M_INSTRUCT]
+    .some((pin) => pin.id === manifest.id && pin.revision === manifest.revision && pin.storageId === manifest.storageId);
   const requirement = manifest.compatibleRuntimes.find((runtime) => runtime.id === 'llama.rn');
   if (!requirement) return false;
   return !requirement.minimumVersion
@@ -42,13 +46,18 @@ function supportsAvailableLlamaRuntime(
 
 export function createHubAvailableModels(
   registry: ModelRegistry,
-  policy: Pick<HubExecutionPolicy, 'runtimeAvailable' | 'runtimeVersion' | 'experimentalEnabled'>
+  policy: Pick<HubExecutionPolicy, 'runtimeAvailable' | 'runtimeVersion' | 'experimentalEnabled' | 'runtimeId'>
 ): AvailableModel[] {
   return registry.models.map((record) => {
     const runtimeSupported = supportsAvailableLlamaRuntime(record.manifest, policy);
     return {
       manifest: {
         ...record.manifest,
+        ...(policy.runtimeId === 'modelcommons.android.cpu' ? {
+          compatibleRuntimes: [{ id: 'modelcommons.android.cpu', minimumVersion: '0.1.0' }],
+          recommendedProfiles: ['safe'],
+          context: { recommended: 1024, maximum: 1024, trained: 8192 },
+        } : {}),
         // This adapter currently initializes text-only GGUF contexts. Catalog
         // metadata remains intact in the registry and Models UI.
         capabilities: record.manifest.capabilities.filter((capability) => capability === 'text'),
@@ -59,7 +68,7 @@ export function createHubAvailableModels(
         && (!record.manifest.experimental || policy.experimentalEnabled)
         ? 'READY'
         : 'NOT_READY',
-      runtimeIds: runtimeSupported ? ['llama.rn'] : [],
+      runtimeIds: runtimeSupported ? [policy.runtimeId ?? 'llama.rn'] : [],
     };
   });
 }
@@ -73,6 +82,7 @@ function executionEligible(record: ModelRegistryRecord, registry: ModelRegistry,
     || !supportsAvailableLlamaRuntime(record.manifest, policy)
   ) return false;
 
+  if (policy.runtimeId === 'modelcommons.android.cpu') return (policy.profileId ?? 'safe') === 'safe' && (policy.context ?? 1024) <= 1024;
   if (!policy.deviceProfile) return true;
   try {
     const resolution = resolveRuntimeProfile({

@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Legacy platform runner keeps these owner-run tests free of new test dependencies. -->
+    <uses-library android:name="android.test.runner" android:required="false" />
+    <uses-library android:name="android.test.base" android:required="false" />
+    <uses-library android:name="android.test.mock" android:required="false" />
+  </application>
+</manifest>

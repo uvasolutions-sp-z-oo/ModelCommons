@@ -40,9 +40,15 @@ export interface AndroidServiceInfo {
   runtimeState: 'RUNTIME_NOT_READY' | 'READY';
   maxRequestBytes: number;
   maxEventBytes: number;
+  runtimeId: string;
+  runtimeVersion: string;
+  sourceIdentity: string;
+  contextSize: number;
+  maxOutputTokens: number;
 }
 
 export interface AndroidModelDescriptor {
+  manifestJson: string;
   id: string;
   revision: string;
   displayName: string;
@@ -66,6 +72,7 @@ export interface AndroidSessionResult extends AndroidOperationResult {
 }
 
 export interface AndroidStreamEvent {
+  localFailure?: boolean;
   sessionId: string;
   requestId: string;
   sequence: number;
@@ -107,8 +114,14 @@ export interface ModelCommonsNativeModuleShape {
   readLeaseMetadata?(leaseId: string): Promise<string>;
   statLease?(leaseId: string): Promise<{ size: number; regular: boolean }>;
 
-  connectAndroidHub?(packageName: string): Promise<AndroidServiceInfo>;
+  connectAndroidHub?(packageName: string, certificates: string[]): Promise<AndroidServiceInfo>;
+  androidAcknowledge?(sessionId: string, requestId: string, sequence: number): Promise<AndroidOperationResult>;
+  androidIsSessionDrained?(sessionId: string): Promise<boolean>;
+  androidHostAvailability?(): Promise<{ available: boolean; runtimeId: string; runtimeVersion: string; packageName: string }>;
+  beginAndroidHubMutation?(): Promise<void>;
+  endAndroidHubMutation?(): Promise<void>;
   disconnectAndroidHub?(): Promise<void>;
+  openAndroidHub?(packageName: string, certificates: string[]): Promise<void>;
   androidListModels?(cursor: string | null, limit: number): Promise<AndroidModelPage>;
   androidCreateSession?(modelId: string, profileId: string): Promise<AndroidSessionResult>;
   androidGenerate?(sessionId: string, requestId: string, requestJson: string): Promise<AndroidOperationResult>;

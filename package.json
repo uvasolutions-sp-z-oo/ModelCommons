@@ -34,6 +34,7 @@
     "@modelcommons/embedded": "0.1.0",
     "@modelcommons/device-profile": "0.1.0",
     "@modelcommons/native": "0.1.0",
+    "@modelcommons/inference-host": "0.1.0",
     "@modelcommons/protocol": "0.1.0",
     "@modelcommons/provider-anthropic": "0.1.0",
     "@modelcommons/provider-openai": "0.1.0",

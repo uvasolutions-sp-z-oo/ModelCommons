@@ -13,6 +13,8 @@ data class CallerIdentity(
   val uid: Int,
   val userId: Int,
   val packages: List<String>,
+  val signingIdentity: List<String> = emptyList(),
+  val approvalEpoch: Long = 0,
 )
 
 data class PendingClient(
@@ -26,10 +28,12 @@ class CallerAuthorizer(private val context: Context) {
   private val packageManager = context.packageManager
   private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
-  fun requireAuthorized(uid: Int, requiredScope: String): CallerIdentity {
+  fun requireAuthorized(uid: Int, requiredScope: String, rememberDenied: Boolean = true): CallerIdentity {
     val packages = packageManager.getPackagesForUid(uid)?.toList()?.sorted().orEmpty()
-    if (packages.isEmpty()) throw SecurityException("CLIENT_NOT_AUTHORIZED: caller UID has no packages.")
-    val identity = CallerIdentity(uid, userIdForUid(uid), packages)
+    if (packages.isEmpty() || packages.size > 16) throw SecurityException("CLIENT_NOT_AUTHORIZED")
+    val certificates = packages.flatMap { name -> signingFingerprints(name).map { "$name:$it" } }
+    if (certificates.size < packages.size || certificates.size > 64) throw SecurityException("CLIENT_NOT_AUTHORIZED")
+    val identity = CallerIdentity(uid, userIdForUid(uid), packages, certificates.sorted(), preferences.getLong("epoch", 0))
     if (isTrustedHubProcess(uid, Process.myUid(), packages, context.packageName)) return identity
 
     val approvals = readApprovals()
@@ -43,7 +47,7 @@ class CallerAuthorizer(private val context: Context) {
       }
     }
     if (!authorized) {
-      rememberPending(identity)
+      if (rememberDenied) rememberPending(identity)
       throw SecurityException(
         "PERMISSION_REQUIRED: every package sharing caller UID ${identity.uid} must have an active certificate-bound approval."
       )
@@ -86,15 +90,19 @@ class CallerAuthorizer(private val context: Context) {
       updatedAt = System.currentTimeMillis(),
     )
     records.add(record)
-    check(preferences.edit().putString(KEY_APPROVALS, encodeApprovals(records)).commit()) {
+    require(records.size <= 128) { "Authorization capacity reached." }
+    check(preferences.edit().putString(KEY_APPROVALS, encodeApprovals(records))
+      .putLong("epoch", preferences.getLong("epoch", 0) + 1).commit()) {
       "Unable to persist client authorization."
     }
   }
 
   fun pendingClients(): List<PendingClient> {
     val raw = preferences.getString(KEY_PENDING, null) ?: return emptyList()
+    if (raw.length > 128 * 1024) return emptyList()
     return try {
       val array = JSONArray(raw)
+      require(array.length() <= 128)
       buildList {
         for (index in 0 until array.length()) {
           val item = array.getJSONObject(index)
@@ -123,8 +131,9 @@ class CallerAuthorizer(private val context: Context) {
   }
 
   @Synchronized
-  private fun rememberPending(identity: CallerIdentity) {
+  @Synchronized private fun rememberPending(identity: CallerIdentity) {
     val pending = pendingClients().associateBy { "${it.userId}:${it.packageName}" }.toMutableMap()
+    if (identity.packages.all { (pending["${identity.userId}:$it"]?.lastSeenAt ?: 0) > System.currentTimeMillis() - 30000 }) return
     for (packageName in identity.packages) {
       pending["${identity.userId}:$packageName"] = PendingClient(
         packageName,
@@ -134,7 +143,7 @@ class CallerAuthorizer(private val context: Context) {
       )
     }
     val encoded = JSONArray()
-    pending.values.sortedBy { it.packageName }.forEach { item ->
+    pending.values.sortedByDescending { it.lastSeenAt }.take(128).forEach { item ->
       encoded.put(
         JSONObject()
           .put("packageName", item.packageName)
@@ -163,16 +172,12 @@ class CallerAuthorizer(private val context: Context) {
   }
 
   @Suppress("DEPRECATION")
-  private fun signingFingerprints(packageName: String): List<String> {
+  fun signingFingerprints(packageName: String): List<String> {
     return try {
       val signatures: Array<out Signature> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         val info = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
         val signingInfo = info.signingInfo ?: return emptyList()
-        if (signingInfo.hasMultipleSigners()) {
-          signingInfo.apkContentsSigners.orEmpty()
-        } else {
-          signingInfo.signingCertificateHistory.orEmpty()
-        }
+        signingInfo.apkContentsSigners.orEmpty()
       } else {
         packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures.orEmpty()
       }
@@ -194,8 +199,10 @@ class CallerAuthorizer(private val context: Context) {
 
   private fun readApprovals(): List<Approval> {
     val raw = preferences.getString(KEY_APPROVALS, null) ?: return emptyList()
+    if (raw.length > 128 * 1024) return emptyList()
     return try {
       val array = JSONArray(raw)
+      require(array.length() <= 128)
       buildList {
         for (index in 0 until array.length()) {
           val item = array.getJSONObject(index)

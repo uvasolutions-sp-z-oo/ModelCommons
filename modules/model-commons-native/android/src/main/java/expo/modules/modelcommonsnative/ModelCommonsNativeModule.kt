@@ -11,6 +11,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.modelcommonsnative.client.AndroidHubClient
 import expo.modules.modelcommonsnative.security.CallerAuthorizer
 import expo.modules.modelcommonsnative.service.ModelCommonsService
+import expo.modules.modelcommonsnative.service.InferenceCoordinator
 import expo.modules.modelcommonsnative.storage.AppOwnedFileOps
 import expo.modules.modelcommonsnative.storage.HubStateStore
 import expo.modules.modelcommonsnative.storage.PrivateModelFiles
@@ -27,12 +28,17 @@ class ModelCommonsNativeModule : Module() {
   private val privateFiles by lazy { PrivateModelFiles(androidContext) }
   private data class PendingImport(val id: String, val path: String, val expected: Double, val promise: Promise)
   private var pendingImport: PendingImport? = null
+  private val mutationToken = Any()
+  private var mutating = false
+  private val privateDownloads = java.util.concurrent.atomic.AtomicLong(0)
+  private val privateImports = java.util.concurrent.atomic.AtomicLong(0)
 
   override fun definition() = ModuleDefinition {
     Name("ModelCommonsNative")
     Events("onModelCommonsEvent")
 
     AsyncFunction("importPrivateModel") { id: String, path: String, expected: Double, promise: Promise ->
+      privateImports.incrementAndGet()
       if (pendingImport != null) {
         promise.reject("ERR_PRIVATE_MODEL", "RUNTIME_UNAVAILABLE: An import picker is already active.", null)
       } else {
@@ -81,6 +87,7 @@ class ModelCommonsNativeModule : Module() {
     }
 
     AsyncFunction("downloadPrivateModel") { id: String, source: String, path: String, expected: Double, origins: List<String>, promise: Promise ->
+      privateDownloads.incrementAndGet()
       // Do not block the Expo queue: cancellation/progress must remain callable.
       Thread {
         try {
@@ -93,6 +100,22 @@ class ModelCommonsNativeModule : Module() {
           promise.reject("ERR_PRIVATE_MODEL", "$code: Model provisioning failed.", null)
         }
       }.start()
+    }
+
+    AsyncFunction("privateModelEvidence") {
+      val root = java.io.File(androidContext.noBackupFilesDir.canonicalFile, "ModelCommonsPrivate")
+      var count = 0L
+      var bytes = 0L
+      var entries = 0
+      fun scan(file: java.io.File, depth: Int) {
+        check(depth <= 8 && ++entries <= 8192 && file.canonicalFile == file.absoluteFile) { "INTEGRITY_FAILED" }
+        if (file.isDirectory) {
+          (file.listFiles() ?: throw IllegalStateException("STORAGE_UNAVAILABLE")).forEach { scan(it, depth + 1) }
+        } else if (file.isFile && file.name.contains(".gguf")) { count++; bytes += file.length() }
+      }
+      if (root.exists()) scan(root, 0)
+      mapOf("downloadAttempts" to privateDownloads.get().toDouble(), "importAttempts" to privateImports.get().toDouble(),
+        "artifactCount" to count.toDouble(), "artifactBytes" to bytes.toDouble())
     }
 
     AsyncFunction("getAvailability") {
@@ -135,8 +158,8 @@ class ModelCommonsNativeModule : Module() {
       AppOwnedFileOps.sha256(androidContext, uri)
     }
 
-    AsyncFunction("connectAndroidHub") { packageName: String, promise: Promise ->
-      hubClient.connect(packageName) { result ->
+    AsyncFunction("connectAndroidHub") { packageName: String, certificates: List<String>, promise: Promise ->
+      hubClient.connect(packageName, certificates) { result ->
         result.fold(
           onSuccess = promise::resolve,
           onFailure = { error ->
@@ -148,6 +171,15 @@ class ModelCommonsNativeModule : Module() {
 
     AsyncFunction("disconnectAndroidHub") {
       if (hubClientDelegate.isInitialized()) hubClient.close()
+    }
+
+    AsyncFunction("openAndroidHub") { packageName: String, certificates: List<String> ->
+      require(certificates.size in 1..8 && certificates.all { Regex("^[a-fA-F0-9]{64}$").matches(it) }) { "CLIENT_NOT_AUTHORIZED: Invalid Hub signing policy." }
+      val signers = CallerAuthorizer(androidContext).signingFingerprints(packageName)
+      require(signers.isNotEmpty() && signers.all { it in certificates.map(String::lowercase) }) { "CLIENT_NOT_AUTHORIZED: Hub signing identity does not match policy." }
+      val intent = androidContext.packageManager.getLaunchIntentForPackage(packageName)
+        ?: throw IllegalStateException("HUB_NOT_FOUND: The selected Hub cannot be opened.")
+      androidContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     AsyncFunction("androidListModels") { cursor: String?, limit: Int ->
@@ -168,6 +200,25 @@ class ModelCommonsNativeModule : Module() {
 
     AsyncFunction("androidReleaseSession") { sessionId: String ->
       hubClient.releaseSession(sessionId)
+    }
+
+    AsyncFunction("androidAcknowledge") { sessionId: String, requestId: String, sequence: Double ->
+      require(sequence >= 0 && sequence == sequence.toLong().toDouble())
+      hubClient.acknowledge(sessionId, requestId, sequence.toLong())
+    }
+    AsyncFunction("androidIsSessionDrained") { sessionId: String -> hubClient.isSessionDrained(sessionId) }
+    AsyncFunction("androidHostAvailability") {
+      mapOf("available" to (InferenceCoordinator.backend(androidContext)?.available() == true),
+        "runtimeId" to "modelcommons.android.cpu", "runtimeVersion" to "0.1.0", "packageName" to androidContext.packageName)
+    }
+    AsyncFunction("beginAndroidHubMutation") {
+      synchronized(mutationToken) {
+        check(!mutating && InferenceCoordinator.acquire(mutationToken)) { "RUNTIME_UNAVAILABLE: Hub model is leased or mutation is active." }
+        mutating = true
+      }
+    }
+    AsyncFunction("endAndroidHubMutation") {
+      synchronized(mutationToken) { if (mutating) { mutating = false; InferenceCoordinator.release(mutationToken) } }
     }
 
     AsyncFunction("publishAndroidHubState") { modelsJson: String ->
@@ -193,11 +244,14 @@ class ModelCommonsNativeModule : Module() {
       scopes: List<String> ->
       val authorizer = CallerAuthorizer(androidContext)
       authorizer.setAuthorization(packageName, userId, certificateSha256, approved, scopes)
-      if (!approved) authorizer.installedUid(packageName)?.let(ModelCommonsService::revokeUid)
+      authorizer.installedUid(packageName)?.let(ModelCommonsService::revokeUid)
     }
 
+    OnActivityEntersBackground { if (hubClientDelegate.isInitialized()) hubClient.close() }
     OnDestroy {
       if (hubClientDelegate.isInitialized()) hubClient.close()
+      // A destroyed JS owner cannot prove an outstanding filesystem mutation drained.
+      // Keep that gate occupied until completion or process restart; never admit mmap early.
     }
   }
 }

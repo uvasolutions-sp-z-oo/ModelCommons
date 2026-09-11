@@ -12,7 +12,7 @@ function withRuntimeVersion(
   return {
     ...device,
     runtimeVersions: runtime.available
-      ? { ...device.runtimeVersions, 'llama.rn': runtime.runtimeVersion }
+      ? { ...device.runtimeVersions, [runtime.runtimeId]: runtime.runtimeVersion }
       : device.runtimeVersions,
   };
 }

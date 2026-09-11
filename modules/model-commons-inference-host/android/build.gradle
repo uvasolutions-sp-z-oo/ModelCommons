@@ -1,0 +1,27 @@
+apply plugin: 'com.android.library'
+group = 'org.modelcommons.host'
+version = '0.1.0'
+def expoModulesCorePlugin = new File(project(':expo-modules-core').projectDir.absolutePath, 'ExpoModulesCorePlugin.gradle')
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+def safeExtGet = { prop, fallback -> rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback }
+
+// Resolve the exact installed npm source, including in EAS checkouts. No fetch or private ABI.
+def sourcePackage = providers.exec {
+  workingDir rootProject.projectDir
+  commandLine 'node', '--print', "require.resolve('llama.rn/package.json')"
+}.standardOutput.asText.get().trim()
+android {
+  namespace 'org.modelcommons.host'
+  compileSdk safeExtGet('compileSdkVersion', 36)
+  defaultConfig {
+    minSdk 24
+    testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    ndk { abiFilters 'arm64-v8a' }
+    externalNativeBuild { cmake { arguments "-DLLAMA_PACKAGE=${new File(sourcePackage).parent.replace('\\', '/')}" } }
+    consumerProguardFiles 'consumer-rules.pro'
+  }
+  externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt' } }
+}
+dependencies { implementation project(':modelcommons-native') }

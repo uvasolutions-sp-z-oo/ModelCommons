@@ -53,11 +53,13 @@ Both files must be distinct siblings in app-owned storage (or, on iOS, an active
 
 ## Android Binder contract
 
-`IModelCommonsService` is API version 1 and protocol version 0.1.0. Every Binder method captures `Binder.getCallingUid()` and re-authorizes it; authorization is not trusted from `onBind`. All packages sharing the UID must have a persisted approval for the requested scope and a matching installed signing-certificate history. The self-process shortcut applies only when PackageManager reports the Hub as the sole package for its UID; a shared UID falls through to explicit approvals. Corrupt authorization storage fails closed. Revocation is persisted and immediately drops that UID's sessions in a running service.
+`IModelCommonsService` is API version **2** and protocol version 0.1.0. Rebuild both sides; API 1 parcels are incompatible. Session creation negotiates protocol, Safe/context 1024/output ceiling 128 and a Binder lifetime token. UID/package/user/signing identity and approval epoch belong to the session, and scopes are rechecked before work and delivery. Every package sharing a UID needs approval. Only the sole Hub package in its own process bypasses external approval.
 
 Unknown clients are recorded as pending after a rejected call. The Hub UI can inspect `listPendingAndroidClients()` and call `setAndroidClientAuthorization(...)`. Requests are capped at 48 KiB, events and model pages at 16/48 KiB, sessions are UID-owned, callback Binder death cancels work, and client teardown releases sessions.
 
-The Binder boundary and lifecycle are real, but centralized inference is intentionally not claimed in this iteration. `getCapabilities()` returns `centralizedInference: false` and `runtimeState: 'RUNTIME_NOT_READY'`; accepted generation requests terminate with the canonical `RUNTIME_UNAVAILABLE` error and a message identifying the not-ready broker. `llama.rn` is JSI-owned, so production Hub inference still needs a JS/headless-native broker rather than a fabricated Kotlin call path.
+The optional `@modelcommons/inference-host` now supplies a service-owned CPU worker built from pinned source into an isolated JNI library. It is not a dependency of this connector. Without that package/library, capabilities remain unavailable. With it, centralized inference is implemented in source; compilation and signed-device verification are pending. Availability does not establish successful model loading or inference. See the [owner-run build, trust, packaging and physical acceptance guide](../../docs/verification/android-binder-inference-owner-run.md).
+
+`createAndroidBinderTransport({ packageName, trustedCertificateSha256 })` returns `{ transport, serviceInfo, disconnect }` for the canonical client. Select the package and actual installed signing pin explicitly. Native package visibility must contain that package through the plugin's `androidHubPackages`. A later connection invalidates earlier transports. The transport uses one-event credit, native cancellation and drain confirmation, including iterator abandonment. It never provisions a private model or initializes an embedded runtime.
 
 ## Device profile
 

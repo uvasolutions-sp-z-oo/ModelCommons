@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Handler
+import android.os.Binder
 import android.os.IBinder
 import android.os.Looper
 import expo.modules.modelcommonsnative.ipc.GenerateRequestParcel
@@ -13,6 +14,7 @@ import expo.modules.modelcommonsnative.ipc.IModelCommonsService
 import expo.modules.modelcommonsnative.ipc.OperationResultParcel
 import expo.modules.modelcommonsnative.ipc.StreamEventParcel
 import expo.modules.modelcommonsnative.service.ModelCommonsService
+import expo.modules.modelcommonsnative.security.CallerAuthorizer
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
@@ -24,6 +26,7 @@ class AndroidHubClient(
   private val mainHandler = Handler(Looper.getMainLooper())
   private val sessions = ConcurrentHashMap<String, SessionIdentity>()
   private val operations = ConcurrentHashMap<OperationKey, OperationState>()
+  private val pendingDelivery = ConcurrentHashMap<OperationKey, Long>()
   @Volatile private var service: IModelCommonsService? = null
   @Volatile private var serviceBinder: IBinder? = null
   private var connection: ServiceConnection? = null
@@ -32,6 +35,9 @@ class AndroidHubClient(
   private var activeDeathRecipient: IBinder.DeathRecipient? = null
   @Volatile private var connectionGeneration = 0L
   @Volatile private var intentionalDisconnect = false
+  private val lifetime = Binder()
+  private var trustedCertificates: List<String> = emptyList()
+  private var connectedSigningIdentity: List<String> = emptyList()
 
   private val callback = object : IModelCommonsCallback.Stub() {
     override fun onEvent(event: StreamEventParcel) {
@@ -40,6 +46,7 @@ class AndroidHubClient(
       synchronized(state) {
         if (state.terminal) return
         val validated = try {
+          require(pendingDelivery.putIfAbsent(key, event.sequence) == null) { "Hub exceeded its event credit." }
           validateStreamEvent(event, key, state)
         } catch (_: Exception) {
           failOperationLocked(
@@ -75,8 +82,13 @@ class AndroidHubClient(
     get() = serviceBinder?.isBinderAlive == true && service != null
 
   @Synchronized
-  fun connect(packageName: String, result: (Result<Map<String, Any?>>) -> Unit) {
+  fun connect(packageName: String, certificates: List<String>, result: (Result<Map<String, Any?>>) -> Unit) {
     require(PACKAGE_NAME.matches(packageName)) { "Invalid Hub package name." }
+    require(certificates.size <= 8 && certificates.all { Regex("^[a-fA-F0-9]{64}$").matches(it) }) { "Invalid Hub certificate policy." }
+    val installed = CallerAuthorizer(context).signingFingerprints(packageName).sorted()
+    if (installed.isEmpty()) throw IllegalStateException("HUB_NOT_FOUND: The selected Hub is not installed or visible.")
+    val trusted = certificates.map { it.lowercase() }
+    require(installed.isNotEmpty() && (packageName == context.packageName || installed.all { it in trusted })) { "CLIENT_NOT_AUTHORIZED: Hub signing identity does not match policy." }
     if (isConnected && connectedPackage == packageName) {
       result(runCatching { readServiceInfo(requireService()) })
       return
@@ -86,6 +98,8 @@ class AndroidHubClient(
       return
     }
     close()
+    trustedCertificates = trusted
+    connectedSigningIdentity = installed
     intentionalDisconnect = false
     val generation = connectionGeneration
     pendingConnect = result
@@ -94,7 +108,8 @@ class AndroidHubClient(
     val intent = Intent(ModelCommonsService.ACTION_BIND).setComponent(component)
     val newConnection = object : ServiceConnection {
       override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-        handleServiceConnected(generation, binder)
+        try { connectionIo.execute { handleServiceConnected(generation, binder) } }
+        catch (_: java.util.concurrent.RejectedExecutionException) { handleTransportDeath(generation, null, "Hub connection lane is busy.") }
       }
 
       override fun onServiceDisconnected(name: ComponentName) {
@@ -125,6 +140,9 @@ class AndroidHubClient(
       connection = null
       connectedPackage = null
     }
+    mainHandler.postDelayed({
+      synchronized(this) { if (generation == connectionGeneration && pendingConnect != null) close() }
+    }, 10000)
   }
 
   @Synchronized
@@ -146,6 +164,7 @@ class AndroidHubClient(
       message = "The Hub connection was closed before the request completed.",
     )
     sessions.clear()
+    pendingDelivery.clear()
     val recipient = activeDeathRecipient
     serviceBinder?.let { binder ->
       try {
@@ -182,6 +201,7 @@ class AndroidHubClient(
           "displayName" to model.displayName,
           "state" to model.state,
           "capabilities" to model.capabilities,
+          "manifestJson" to model.manifestJson,
         )
       },
       "nextCursor" to page.nextCursor,
@@ -189,11 +209,12 @@ class AndroidHubClient(
   }
 
   fun createSession(modelId: String, profileId: String): Map<String, Any?> {
+    if (sessions.size >= 4) return invalidOperationMap("Client session capacity reached.")
     if (!validIdentifier(modelId) || !validIdentifier(profileId)) {
       return invalidOperationMap("Invalid model/profile identifier.")
     }
     val snapshot = requireConnectionSnapshot()
-    val result = snapshot.remote.createSession(modelId, profileId)
+    val result = snapshot.remote.createSession(modelId, profileId, ModelCommonsService.PROTOCOL_VERSION, 1024, 128, lifetime)
     val sessionId = result.sessionId?.takeIf { result.ok && validIdentifier(it) }
     val invalidSuccess = result.ok && sessionId == null
     val current = synchronized(this) {
@@ -249,6 +270,8 @@ class AndroidHubClient(
         "message" to "The session is not owned by this Hub connection.",
       )
       key = OperationKey(sessionId, requestId)
+      if (operations.keys.any { it.sessionId == sessionId } || pendingDelivery.keys.any { it.sessionId == sessionId } || operations.size >= 4)
+        return invalidOperationMap("Client request capacity reached.")
       state = OperationState(identity.modelId, identity.profileId)
       if (operations.putIfAbsent(key, state) != null) {
         return mapOf(
@@ -331,6 +354,7 @@ class AndroidHubClient(
       val valid = isConnectionCurrentLocked(snapshot)
       if (valid && result.ok) {
         sessions.remove(sessionId)
+        pendingDelivery.keys.filter { it.sessionId == sessionId }.forEach { pendingDelivery.remove(it) }
         failOperations(
           code = "USER_CANCELLED",
           message = "The session was released before the request completed.",
@@ -343,6 +367,7 @@ class AndroidHubClient(
   }
 
   private fun readServiceInfo(remote: IModelCommonsService): Map<String, Any?> {
+    require(remote.apiVersion == ModelCommonsService.API_VERSION && remote.protocolVersion == ModelCommonsService.PROTOCOL_VERSION) { "PROTOCOL_VERSION_UNSUPPORTED: The Hub Binder API is incompatible." }
     val capabilities = remote.capabilities
     return mapOf(
       "protocolVersion" to remote.protocolVersion,
@@ -351,6 +376,11 @@ class AndroidHubClient(
       "runtimeState" to capabilities.runtimeState,
       "maxRequestBytes" to capabilities.maxRequestBytes,
       "maxEventBytes" to capabilities.maxEventBytes,
+      "runtimeId" to capabilities.runtimeId,
+      "runtimeVersion" to capabilities.runtimeVersion,
+      "sourceIdentity" to capabilities.sourceIdentity,
+      "contextSize" to capabilities.contextSize,
+      "maxOutputTokens" to capabilities.maxOutputTokens,
     )
   }
 
@@ -383,6 +413,7 @@ class AndroidHubClient(
   private fun requireConnectionSnapshot(): ConnectionSnapshot = requireConnectionSnapshotLocked()
 
   private fun requireConnectionSnapshotLocked(): ConnectionSnapshot {
+    verifySigningIdentity()
     val remote = service
     val binder = serviceBinder
     if (remote == null || binder?.isBinderAlive != true) {
@@ -402,6 +433,7 @@ class AndroidHubClient(
       && snapshot.binder.isBinderAlive
 
   private fun requireService(): IModelCommonsService {
+    verifySigningIdentity()
     val remote = service
     if (remote == null || serviceBinder?.isBinderAlive != true) {
       throw IllegalStateException("ModelCommons Hub is not connected.")
@@ -576,25 +608,31 @@ class AndroidHubClient(
     else -> false
   }
 
-  @Synchronized
   private fun handleServiceConnected(generation: Long, binder: IBinder) {
-    if (generation != connectionGeneration || intentionalDisconnect) return
+    synchronized(this) { if (generation != connectionGeneration || intentionalDisconnect) return }
     val remote = IModelCommonsService.Stub.asInterface(binder)
     val recipient = IBinder.DeathRecipient {
       mainHandler.post { handleTransportDeath(generation, binder, "Hub Binder died.") }
     }
     try {
-      binder.linkToDeath(recipient, 0)
-      activeDeathRecipient = recipient
-      serviceBinder = binder
-      service = remote
+      synchronized(this) {
+        if (generation != connectionGeneration || intentionalDisconnect) return
+        verifySigningIdentity()
+        binder.linkToDeath(recipient, 0)
+        activeDeathRecipient = recipient
+        serviceBinder = binder
+        service = remote
+      }
       val info = readServiceInfo(remote)
-      pendingConnect?.invoke(Result.success(info))
-      pendingConnect = null
+      synchronized(this) {
+        if (generation != connectionGeneration || intentionalDisconnect) return
+        pendingConnect?.invoke(Result.success(info)); pendingConnect = null
+      }
     } catch (error: Throwable) {
-      pendingConnect?.invoke(Result.failure(error))
-      pendingConnect = null
-      close()
+      synchronized(this) {
+        if (generation != connectionGeneration || intentionalDisconnect) return
+        pendingConnect?.invoke(Result.failure(error)); pendingConnect = null; close()
+      }
     }
   }
 
@@ -657,6 +695,7 @@ class AndroidHubClient(
     if (state.terminal) return
     state.terminal = true
     if (!operations.remove(key, state)) return
+    pendingDelivery.remove(key)
     mainHandler.post {
       var sequence = state.nextSequence
       if (!state.startedAccepted) {
@@ -670,7 +709,7 @@ class AndroidHubClient(
             JSONObject()
               .put("offline", true)
               .put("resolvedModelId", state.modelId)
-              .put("runtimeId", "android-binder-scaffold")
+              .put("runtimeId", "modelcommons.android.cpu")
               .put("profileId", state.profileId),
           )
           .toString()
@@ -699,8 +738,24 @@ class AndroidHubClient(
         "requestId" to key.requestId,
         "sequence" to sequence.toDouble(),
         "eventJson" to eventJson,
+        "localFailure" to true,
       )
     )
+  }
+
+  fun acknowledge(sessionId: String, requestId: String, sequence: Long): Map<String, Any?> {
+    val snapshot = requireConnectionSnapshot()
+    require(pendingDelivery.remove(OperationKey(sessionId, requestId), sequence)) { "Invalid event credit." }
+    return operationMap(snapshot.remote.acknowledge(sessionId, requestId, sequence))
+  }
+
+  fun isSessionDrained(sessionId: String): Boolean = requireConnectionSnapshot().remote.isSessionDrained(sessionId)
+
+  private fun verifySigningIdentity() {
+    val name = connectedPackage ?: throw IllegalStateException("HUB_NOT_FOUND: No Hub is selected.")
+    val current = CallerAuthorizer(context).signingFingerprints(name).sorted()
+    require(current.isNotEmpty() && current == connectedSigningIdentity &&
+      (name == context.packageName || current.all { it in trustedCertificates })) { "CLIENT_NOT_AUTHORIZED: The Hub signing identity changed." }
   }
 
   private data class ConnectionSnapshot(
@@ -718,6 +773,8 @@ class AndroidHubClient(
   }
 
   companion object {
+    private val connectionIo = java.util.concurrent.ThreadPoolExecutor(1, 1, 0, java.util.concurrent.TimeUnit.SECONDS,
+      java.util.concurrent.ArrayBlockingQueue(1), java.util.concurrent.ThreadFactory { Thread(it, "ModelCommonsConnection").apply { isDaemon = true } })
     private val PACKAGE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
     private const val MAX_SAFE_JS_INTEGER = 9_007_199_254_740_991L
     private val STOP_REASONS = setOf("stop", "length", "tool_call", "cancelled", "error")

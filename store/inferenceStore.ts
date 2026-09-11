@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
@@ -173,9 +174,9 @@ export const useHubStore = create<HubState>()(
   persist(
     (set) => ({
       selectedModelId: 'modelcommons:auto',
-      profileId: 'balanced',
-      context: 2048,
-      maxOutput: 512,
+      profileId: Platform.OS === 'android' ? 'safe' : 'balanced',
+      context: Platform.OS === 'android' ? 1024 : 2048,
+      maxOutput: Platform.OS === 'android' ? 128 : 512,
       diagnosticsEnabled: false,
       experimentalEnabled: false,
       registry: createEmptyRegistry(),

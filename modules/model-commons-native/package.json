@@ -27,6 +27,7 @@
     "react-native": ">=0.81.0 <0.82.0"
   },
   "dependencies": {
+    "@modelcommons/client": "0.1.0",
     "@expo/config-plugins": "^54.0.0",
     "@modelcommons/protocol": "0.1.0",
     "@modelcommons/model-store": "0.1.0"

@@ -1,0 +1,4 @@
+{
+  global: Java_org_modelcommons_host_NativeWorker_*;
+  local: *;
+};

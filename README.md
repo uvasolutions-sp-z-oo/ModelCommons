@@ -47,10 +47,10 @@ Implemented in the current source tree:
   lifecycle/cancellation and loaded-template capability probes;
 - Hub-side in-process composition from the verified store through profile
   resolution, client sessions, llama.rn, and provider-shaped backends; and
-- optional Android Binder and iOS shared-storage native connector code, with the
-  Android broker advertising `RUNTIME_NOT_READY` and generation failing with
-  canonical `RUNTIME_UNAVAILABLE` after an ordered `response.started`; the
-  centralized runtime broker remains unimplemented.
+- optional Android Binder and iOS shared-storage native connector code, plus an
+  Android Hub-only CPU inference host built from pinned source. Binder API 2,
+  Hub chat and the S&P shared route are implemented in source, **not yet built or
+  device-verified**. See the [Android owner-run gate](docs/verification/android-binder-inference-owner-run.md).
 
 Not yet verified as an end-to-end ModelCommons system:
 
@@ -61,8 +61,8 @@ Not yet verified as an end-to-end ModelCommons system:
 - physical-device support for the llama.rn adapter or native connectors;
 - certified official OpenAI/Anthropic SDK compatibility on React Native;
 - provider features outside the documented local subsets;
-- centralized Android inference over Binder (the secured contract exists; the
-  service runtime broker does not);
+- centralized Android inference over Binder (the service-owned worker now has
+  source implementation; native compilation and the signed two-app demonstration remain outstanding);
 - verified iOS App Group or security-scoped shared-file access;
 - tool/structured-output requests through the current Hub (its backend exposes
   neither yet), embeddings (no catalog runtime implements them), or vision (the

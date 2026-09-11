@@ -29,7 +29,8 @@ export default function ChatScreen() {
   const session = sessions.find((candidate) => candidate.id === id);
   const resolvedModel = selectHubTextRecord(registry, selectedModelId, {
     runtimeAvailable,
-    runtimeVersion: deviceProfile?.runtimeVersions['llama.rn'],
+    runtimeId: Platform.OS === 'android' ? 'modelcommons.android.cpu' : 'llama.rn',
+    runtimeVersion: deviceProfile?.runtimeVersions[Platform.OS === 'android' ? 'modelcommons.android.cpu' : 'llama.rn'],
     experimentalEnabled,
     deviceProfile,
     profileId,

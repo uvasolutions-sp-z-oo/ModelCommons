@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ActionButton, Badge, Card, HubScreen, KeyValue, Muted, SectionTitle, palette } from '../../components/modelcommons/HubUI';
@@ -24,7 +24,8 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const selected = selectHubTextRecord(registry, selectedModelId, {
     runtimeAvailable,
-    runtimeVersion: deviceProfile?.runtimeVersions['llama.rn'],
+    runtimeId: Platform.OS === 'android' ? 'modelcommons.android.cpu' : 'llama.rn',
+    runtimeVersion: deviceProfile?.runtimeVersions[Platform.OS === 'android' ? 'modelcommons.android.cpu' : 'llama.rn'],
     experimentalEnabled,
     deviceProfile,
     profileId,

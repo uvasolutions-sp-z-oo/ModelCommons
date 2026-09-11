@@ -248,12 +248,33 @@ export async function acquireModelLease(connectionId: string, relativePath: stri
   return lease;
 }
 
-export async function connectAndroidHub(packageName: string): Promise<AndroidServiceInfo> {
+export async function connectAndroidHub(packageName: string, trustedCertificateSha256: string[] = []): Promise<AndroidServiceInfo> {
   return callNative(
-    () => (requireMethod('connectAndroidHub') as (value: string) => Promise<AndroidServiceInfo>)(packageName),
+    () => requireMethod('connectAndroidHub')(packageName, trustedCertificateSha256),
     NATIVE_ERRORS.connectHub
   );
 }
+
+export async function androidHostAvailability() {
+  return callNative(() => requireMethod('androidHostAvailability')(), NATIVE_ERRORS.hubTransport);
+}
+export async function openAndroidHub(packageName: string, certificates: string[]): Promise<void> {
+  return callNative(() => requireMethod('openAndroidHub')(packageName, certificates), NATIVE_ERRORS.connectHub);
+}
+export async function beginAndroidHubMutation(): Promise<void> {
+  return callNative(() => requireMethod('beginAndroidHubMutation')(), NATIVE_ERRORS.hubTransport);
+}
+export async function endAndroidHubMutation(): Promise<void> {
+  return callNative(() => requireMethod('endAndroidHubMutation')(), NATIVE_ERRORS.hubTransport);
+}
+export async function androidAcknowledge(sessionId: string, requestId: string, sequence: number) {
+  return callNative(() => requireMethod('androidAcknowledge')(sessionId, requestId, sequence), NATIVE_ERRORS.hubTransport);
+}
+export async function androidIsSessionDrained(sessionId: string) {
+  return callNative(() => requireMethod('androidIsSessionDrained')(sessionId), NATIVE_ERRORS.hubTransport);
+}
+
+export { createAndroidBinderTransport } from './androidTransport';
 
 export async function disconnectAndroidHub(): Promise<void> {
   await callNative(

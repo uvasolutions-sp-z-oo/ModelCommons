@@ -11,6 +11,11 @@ data class CapabilitiesParcel(
   val cancellation: Boolean,
   val maxRequestBytes: Int,
   val maxEventBytes: Int,
+  val runtimeId: String = "modelcommons.android.cpu",
+  val runtimeVersion: String = "0.1.0",
+  val sourceIdentity: String = "llama.rn-source-0.12.9-b10256-6c8dcaa",
+  val contextSize: Int = 1024,
+  val maxOutputTokens: Int = 128,
 ) : Parcelable
 
 @Parcelize
@@ -27,6 +32,7 @@ data class ModelDescriptorParcel(
   val displayName: String,
   val state: String,
   val capabilities: List<String>,
+  val manifestJson: String = "",
 ) : Parcelable
 
 @Parcelize

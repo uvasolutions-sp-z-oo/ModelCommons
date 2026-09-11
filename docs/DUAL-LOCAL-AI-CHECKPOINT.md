@@ -4,10 +4,16 @@ This is an incomplete implementation checkpoint, not a release or verification r
 
 ## Workspace and authority
 
+2026-09-11 Android follow-up: [native host implementation and owner-run gate](verification/android-binder-inference-owner-run.md)
+supersedes the Android scaffold descriptions below. An optional pinned CPU host,
+Binder API 2, a reusable transport and S&P shared-mode source are now present.
+No compilation, tests or signed-device proof have been performed for this change.
+Historical “not implemented” entries below describe the earlier checkpoint only.
+
 2026-09-11 iOS follow-up: [current implementation and owner-run acceptance](verification/ios-shared-models.md)
 supersedes the iOS gap descriptions below. Files coordination, candidate validation
 and an explicit App Group writer now have source changes, still untested/unbuilt
-for this change. Android centralized inference remains unavailable. The current
+for this change. Android status is tracked in the follow-up above. The current
 consumer checkout is `D:\GitHub\spm`; embedded device success reported by the owner
 does not establish cross-app reuse.
 

@@ -132,3 +132,13 @@ Before publication:
 8. Review trademarks and compatibility wording.
 9. Build and inspect package tarballs; current manifests expose TypeScript
    source and are not ready for ordinary npm/Node consumers.
+# Optional Android inference host (2026-09-11 source implementation)
+
+`@modelcommons/inference-host` compiles a separate CPU/JNI library from the exact
+`llama.rn@0.12.9` npm source archive, including its llama.cpp/ggml patches. The
+archive and complete source file hashes are recorded in
+[`source-pin.json`](modules/model-commons-inference-host/source-pin.json); the
+two MIT source notices are reproduced in
+[`NOTICE`](modules/model-commons-inference-host/NOTICE). This host is included
+only in the Hub, and is distinct from the existing embedded llama.rn binary.
+No native build or distribution verification has been performed for this change.

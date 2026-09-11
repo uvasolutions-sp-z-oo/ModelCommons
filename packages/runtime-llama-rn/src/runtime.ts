@@ -9,6 +9,7 @@ import {
 import type { NativeCompletionResult, TokenData } from 'llama.rn';
 import { completionParams, contextParams, reportCapabilities, resultContent, resultStopReason, resultToolCalls } from './mapping';
 import { AsyncEventQueue, AsyncMutex } from './mutex';
+import { recordLlamaInitialization } from './evidence';
 import { classifyInitFailure, modelLocationKind, type InitFailureStage } from './initialization';
 import {
   LLAMA_RN_RUNTIME_ID,
@@ -131,6 +132,7 @@ class ContextPool {
           modelInfoProbe = 'passed';
         }
         failureStage = 'initLlama';
+        recordLlamaInitialization();
         context = await llama.initLlama(params);
         failureStage = 'reportCapabilities';
         const entry: ContextEntry = {
