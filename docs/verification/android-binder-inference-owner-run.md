@@ -159,6 +159,8 @@ Record device/model/Android version, API/ABI, both APK identifiers/version codes
 
 Keep four separate statuses in the evidence: source implementation, locally compiled/tested, signed-device verified, public-release supported. Until this matrix passes, the launch claim remains **unverified Android centralized inference**.
 
+## Run on the android device
+
 Keep port 8081 for USB development. Port 4004 is conditional.
 
 - 8081: lets the phone reach Metro on your PC to load the development JavaScript bundle. React Native documentation.
