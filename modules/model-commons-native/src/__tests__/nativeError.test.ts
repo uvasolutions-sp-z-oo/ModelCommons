@@ -39,10 +39,17 @@ describe('native error normalization', () => {
       () => Promise.reject(new Error('NSCocoaErrorDomain 257: secret filesystem details')),
       fallback
     );
-    await expect(rejected).rejects.toMatchObject({
+    const error = await rejected.catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(ModelCommonsError);
+    const failure = error as ModelCommonsError;
+    expect(failure.code).toBe('STORAGE_UNAVAILABLE');
+    expect(failure.message).toBe('The native storage operation failed.');
+    // Error omits cause when none is supplied; do not require an own undefined property.
+    expect(failure.cause).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(failure))).toEqual({
       code: 'STORAGE_UNAVAILABLE',
       message: 'The native storage operation failed.',
-      cause: undefined,
+      retryable: true,
     });
   });
 

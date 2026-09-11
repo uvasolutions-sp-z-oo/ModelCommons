@@ -7,7 +7,10 @@ import { createLlamaRnRuntime } from '../runtime';
 const profile: RuntimeProfile = {
   schema: 'modelcommons.runtime-profile', schemaVersion: 1, protocolVersion: '0.1.0',
   id: 'balanced', displayName: 'Balanced', stability: 'stable',
-  llama: { nCtx: 1024, nBatch: 64, nUbatch: 32, nGpuLayers: 0, useMmap: true, useMlock: false },
+  llama: {
+    nCtx: 1024, nBatch: 64, nUbatch: 32, nGpuLayers: 0, useMmap: true, useMlock: false,
+    cacheTypeK: 'q8_0', cacheTypeV: 'q8_0',
+  },
 };
 
 describe('llama.rn 0.12.9 file boundary', () => {

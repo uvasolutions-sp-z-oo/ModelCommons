@@ -131,7 +131,7 @@ class CallerAuthorizer(private val context: Context) {
   }
 
   @Synchronized
-  @Synchronized private fun rememberPending(identity: CallerIdentity) {
+  private fun rememberPending(identity: CallerIdentity) {
     val pending = pendingClients().associateBy { "${it.userId}:${it.packageName}" }.toMutableMap()
     if (identity.packages.all { (pending["${identity.userId}:$it"]?.lastSeenAt ?: 0) > System.currentTimeMillis() - 30000 }) return
     for (packageName in identity.packages) {

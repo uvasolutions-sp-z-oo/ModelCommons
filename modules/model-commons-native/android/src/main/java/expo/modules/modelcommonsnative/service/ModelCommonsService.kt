@@ -238,11 +238,12 @@ class ModelCommonsService : Service() {
     const val RUNTIME_STATE_NOT_READY = "RUNTIME_NOT_READY"
     const val MAX_REQUEST_BYTES = 48 * 1024
     const val MAX_EVENT_BYTES = 16 * 1024
+    const val MAX_IDENTIFIER_BYTES = 256
     private val instances = CopyOnWriteArraySet<ModelCommonsService>()
     private val deliveries = ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS, ArrayBlockingQueue(1),
       ThreadFactory { Thread(it, "ModelCommonsCallbacks").apply { isDaemon = true } })
     fun revokeUid(uid: Int) { instances.forEach { service -> service.sessions.forEach { (id, s) -> if (s.identity.uid == uid) service.close(id, s) } } }
-    private fun validIdentifier(value: String) = value.isNotBlank() && value.toByteArray(Charsets.UTF_8).size <= 256
+    private fun validIdentifier(value: String) = value.isNotBlank() && value.toByteArray(Charsets.UTF_8).size <= MAX_IDENTIFIER_BYTES
     private fun failure(code: String) = OperationResultParcel(false, code, "The Hub request was not accepted.")
   }
 }
