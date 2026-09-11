@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { nativeArtifactEnv } = require('./native-artifact-env.cjs');
 const project = process.cwd();
 const dependency = path.dirname(require.resolve('llama.rn/package.json', { paths: [project] }));
 const manifest = JSON.parse(fs.readFileSync(path.join(dependency, 'package.json'), 'utf8'));
@@ -30,7 +31,7 @@ if (!present()) {
   const result = spawnSync(process.execPath, [
     ...(process.allowedNodeEnvironmentFlags?.has('--use-system-ca') ? ['--use-system-ca'] : []),
     path.join(dependency, 'install/download-native-artifacts.js'),
-  ], { cwd: project, env: process.env, stdio: 'inherit' });
+  ], { cwd: project, env: nativeArtifactEnv(), stdio: 'inherit' });
   if (result.error || result.status !== 0 || !present()) throw new Error('Native engine payload is missing; stop before producing an unusable binary.');
 }
 process.stdout.write('Pinned llama.rn Apple/Android artifact markers and device payloads are present. This is not device inference verification.\n');

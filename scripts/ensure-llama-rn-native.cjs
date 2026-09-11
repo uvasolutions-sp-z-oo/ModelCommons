@@ -7,6 +7,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { nativeArtifactEnv } = require('../modules/model-commons-native/scripts/native-artifact-env.cjs');
 
 function hasArm64NativePayload(projectRoot, fsModule = fs) {
   const nativeDir = path.join(
@@ -58,7 +59,7 @@ function ensureLlamaRnNativeArtifacts(projectRoot, options = {}) {
   ];
   const result = spawn(process.execPath, nodeArgs, {
     cwd: projectRoot,
-    env: process.env,
+    env: nativeArtifactEnv({ fsModule }),
     stdio: 'inherit',
   });
   if (result.error || result.status !== 0) {
