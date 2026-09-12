@@ -1,64 +1,55 @@
 # ModelCommons documentation
 
-Documentation snapshot: **2026-08-27**.
+Current status: **2026-09-12 — pre-alpha / developer preview**.
 
-This documentation distinguishes four statuses:
-
-- **IMPLEMENTED** — code exists in this repository.
-- **IMPLEMENTED; DEVICE VERIFICATION REQUIRED** — code exists, but native
-  behavior has not been demonstrated on representative physical hardware.
-- **SCAFFOLDED** — types or interfaces exist without an end-to-end implementation.
-- **NOT IMPLEMENTED** — design only.
-
-Qualifiers such as **PARTIAL**, **HEURISTIC**, **UNVERIFIED**, and
-**VERIFICATION PENDING** narrow an implemented status; they are not support
-claims.
+Start with the [project overview](../README.md), [getting-started guide](getting-started.md),
+and [owner-verified iOS Files test](verification/ios-shared-models.md).
 
 ## Current status
 
-| Area | Status | Notes |
-|---|---|---|
-| Canonical protocol/types | IMPLEMENTED | `@modelcommons/protocol` 0.1.0, dependency-free |
-| npm package artifacts | NOT IMPLEMENTED | Package exports point to TypeScript source; no compiled JS/declarations or build/prepack pipeline for ordinary npm consumers |
-| Protocol runtime validation | IMPLEMENTED, PARTIAL | Core manifests/registry/config/path/basic request fields; not every nested field |
-| Host catalog/model store | IMPLEMENTED, PARTIAL; DEVICE VERIFICATION REQUIRED | App service with revision-bound license gating, resume, checksum, recovery, deletion and migration; startup checks size/existence and first load performs full SHA once/process, but hashing is non-interruptible; not a standalone package |
-| Provider-neutral client | IMPLEMENTED | Pure package; enforced configuration/active transport, deterministic selection, single-flight sessions, stream identity/lifecycle validation, clean unavailable state; no multi-factory broker |
-| Native ModelCommons connectors | SCAFFOLDED; DEVICE VERIFICATION REQUIRED | Android IPC/security and iOS App Group/bookmark/lease code exist; Android inference broker is explicitly not ready |
-| llama.rn runtime adapter | IMPLEMENTED; DEVICE VERIFICATION REQUIRED | Text, lifecycle, cancellation, capability probes and grammar/tools gates; no mmproj or device evidence |
-| Hub in-process composition | IMPLEMENTED; DEVICE VERIFICATION REQUIRED | Store/profile/client/runtime/provider backend wired; provider tool/schema discovery remains conservatively disabled and physical evidence is absent |
-| Device profile resolver | IMPLEMENTED, HEURISTIC; DEVICE VERIFICATION REQUIRED | Host/native collection and pure resolver exist; runtime version is attached only after adapter availability, while measurement accuracy/certification remain open |
-| Runtime profiles | IMPLEMENTED, UNVERIFIED | Safe/balanced/performance/experimental-MoE recommendations; no physical evidence |
-| OpenAI compatibility | IMPLEMENTED; VERIFICATION PENDING | Strict local fetch for Responses, Chat, Models and gated Embeddings; fixtures exist, official-SDK/device acceptance remains |
-| Anthropic compatibility | IMPLEMENTED; VERIFICATION PENDING | Strict local Messages fetch; fixtures exist, official-SDK/device acceptance remains |
-| Android Binder | SCAFFOLDED; DEVICE VERIFICATION REQUIRED | Real bounded/authorized AIDL and client bridge; ordered start/failure callback reports `RUNTIME_NOT_READY` / `RUNTIME_UNAVAILABLE`, but centralized inference is not implemented |
-| iOS App Group/shared-file | IMPLEMENTED, PARTIAL; DEVICE VERIFICATION REQUIRED | Native connector/leases and sanitized canonical JS errors exist; file coordination, signed entitlement/bookmark lifecycle, and device evidence remain |
-| Elastic MoE expert cache | NOT IMPLEMENTED | Research direction only |
-| MedGemma reference | SCAFFOLDED | Isolated metadata/safety example; no weights |
+| Area | Status and evidence boundary |
+| --- | --- |
+| iOS Files shared-model generation | Owner-verified on a physical iPhone SE in airplane mode with Sales & Pricing Mobile; exact build/model metadata and attachments pending |
+| Local app-owned text inference | Reported working by the owner; the shared flow records storage and execution ownership separately |
+| iOS App Group sharing | Implemented; separate provisioning and device test pending |
+| Unrelated-team iOS sharing | Design path; separately signed client verification pending |
+| Android Binder inference | API 2 and Hub-only CPU host implemented; native library compiled/linked locally; two-app device acceptance pending |
+| Canonical protocol and client | Implemented; protocol 0.1.0, validation, selection, lifecycle, errors and transport contracts |
+| Model store and embedded composition | Reusable packages implemented; trusted catalog, integrity, leases, private and shared-reader paths |
+| llama.rn adapter | Exact 0.12.9; local text path used in the iOS milestone; broad model/backend/lifecycle coverage pending |
+| Device/runtime profiles | Implemented heuristics; no performance or device certification |
+| Provider-shaped fetch | Contract-tested subsets; official SDK/device acceptance pending; current llama.rn stream lacks the early usage required for Anthropic streaming |
+| Package distribution | Local pack script emits nine consumer archives with JS/declarations and provenance; public npm release pending |
+| Tools, structured output, embeddings, vision | Protocol/adapter declarations are not Hub feature support; current shared demo is text only |
+| Elastic MoE expert cache | Research direction, not implemented |
 
-The host store, pure client, profile resolver, text runtime adapter, and Hub
-in-process composition now exist, but that does not make Android cross-app
-inference, native device support, or npm-ready package artifacts complete.
+**Implemented** means code exists. **Compiled** means a build check passed.
+**Owner-verified** means a specific physical test was reported by the owner;
+its record states what was and was not captured. None of these labels implies
+all-platform production support.
 
-## Guide
+## Guides
 
-- [Architecture overview](architecture/overview.md)
+- [Getting started](getting-started.md)
+- [Roadmap](ROADMAP.md)
+- [Architecture](architecture/overview.md)
 - [Protocol and versioning](protocol/versioning.md)
-- [Provider compatibility matrix](providers/compatibility.md)
-- [Android service architecture](platforms/android.md)
-- [iOS sharing architecture](platforms/ios.md)
-- [Threat model](security/threat-model.md)
+- [Provider compatibility](providers/compatibility.md)
+- [iOS sharing contract](platforms/ios.md)
+- [Android service](platforms/android.md)
 - [Model store](models/store.md)
 - [Memory and Elastic MoE](models/memory-and-moe.md)
 - [Sales & Pricing integration](integrations/sales-and-pricing.md)
-- [Partidito integration](integrations/partidito.md)
-- [TatruMedGemma migration](migration/tatru-medgemma.md)
-- [Physical-device verification](verification/physical-devices.md)
-- [Upstream research ledger](research/upstream-2026-08-27.md)
+- [Partidito integration proposal](integrations/partidito.md)
+- [Threat model](security/threat-model.md)
+- [Physical-device test matrix](verification/physical-devices.md)
+- [Public-preview preparation record](verification/public-preview-readiness.md)
 
-## Status-writing rule
+## Historical material
 
-Documentation and UI must not convert “schema supports,” “upstream supports,” or
-“compiled” into “ModelCommons supports.” Provider compatibility requires fixture
-and official-SDK acceptance tests. Native support requires physical-device
-evidence. Model capability requires both a compatible runtime and the selected
-model/artifacts.
+The [iOS implementation handoff](verification/ios-implementation-handoff.md),
+[dual-local checkpoint](DUAL-LOCAL-AI-CHECKPOINT.md), dated implementation briefs,
+[migration notes](migration/tatru-medgemma.md), and
+[upstream research ledger](research/upstream-2026-08-27.md) preserve earlier
+reasoning. Their dates and outstanding-work statements describe those snapshots;
+the status table above and current verification records take precedence.

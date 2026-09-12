@@ -47,8 +47,11 @@ describe('resolveRuntimeProfile', () => {
 
   it('does not require a second model-sized disk reserve after installation', () => {
     const lowDisk = { ...device(8 * GIB), freeDiskBytes: 100 };
-    expect(resolveRuntimeProfile({ device: lowDisk, model }).compatibility).toBe('UNSUPPORTED');
-    expect(resolveRuntimeProfile({ device: lowDisk, model, artifactInstalled: true }).compatibility).toBe('SUPPORTED');
+    const input = { device: lowDisk, model, requestedContext: model.context.recommended };
+    expect(resolveRuntimeProfile(input).compatibility).toBe('UNSUPPORTED');
+    const installed = resolveRuntimeProfile({ ...input, artifactInstalled: true });
+    expect(installed.compatibility).toBe('SUPPORTED');
+    expect(installed.reasons.join(' ')).not.toContain('Free disk space');
   });
 
   it('fails closed when the declared runtime is missing or below minimum', () => {

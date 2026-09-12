@@ -1,3 +1,8 @@
+> Historical implementation brief/checkpoint. Its instructions and status claims
+> describe earlier work, not the current release state. See the
+> [current documentation status](README.md) and
+> [iOS device evidence](verification/ios-shared-models.md).
+
 # ModelCommons + Sales & Pricing Mobile: dual local-AI implementation
 
 Use this implementation brief with Terra Very High or SOL High reasoning.

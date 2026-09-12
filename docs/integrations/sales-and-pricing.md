@@ -1,152 +1,79 @@
-# Sales & Pricing integration
+# Sales & Pricing Mobile integration
 
-Target application: Expo 54 / React Native 0.81.x enterprise mobile app with an
-existing `llama.rn` dependency. ModelCommons does not modify that application in
-this repository.
+Sales & Pricing Mobile is the first owner-verified consumer of ModelCommons'
+iOS shared-file flow. It is a separate application, not bundled in this repo.
 
-## Recommended vertical slice
+## Verified flow
 
-Add a `ModelCommonsProvider` behind the application's existing provider
-interface. Keep all customer/business semantics, tool implementations, and
-output validation in Sales & Pricing. The provider should translate only at its
-boundary:
+On a physical iPhone SE, the owner removed the consumer's private model,
+downloaded the model in ModelCommons only, selected the shared store through
+the Files folder picker, and generated a real response in airplane mode.
+The app displayed `LOCAL_MODELCOMMONS`.
+
+See the [iOS evidence record](../verification/ios-shared-models.md) for the
+reported timings, missing device/build/model details, and untested cases.
 
 ```text
-existing feature -> existing provider interface -> ModelCommonsProvider
-                                              -> @modelcommons/client
-                                              -> in-process llama.rn transport
+ModelCommons downloads and verifies GGUF
+                  |
+         Shared ModelCommons store
+                  |
+       User grants access through Files
+                  |
+Sales & Pricing Mobile: read-only store + embedded backend
+                  |
+          Canonical ModelCommons client
+                  |
+        Consumer-owned llama.rn runtime
+                  |
+              Offline text
 ```
 
-Because the app already ships llama.rn, the first integration should be an
-in-process transport. An Android hub transport can be a later configuration
-choice; do not make the first release depend on cross-app service discovery.
+Storage is owned by ModelCommons shared storage. Execution is owned by Sales &
+Pricing Mobile. This flow does not run inference inside an iOS Hub service and
+does not share runtime memory between applications.
 
-The pure client/protocol/device-profile packages and a text-only
-`@modelcommons/runtime-llama-rn` adapter exist today. Sales & Pricing still needs
-application composition that exposes its verified store/model/profile through a
-`ModelCommonsTransport`; the reference client demonstrates that glue, but it is
-not yet an integration in the target application.
+## Explicit local modes
 
-## Client configuration
+| Mode | Storage owner | Execution owner |
+| --- | --- | --- |
+| App-contained local | Sales & Pricing Mobile private store | Sales & Pricing Mobile |
+| Shared with ModelCommons on iOS | User-selected ModelCommons store | Sales & Pricing Mobile |
+| Shared with ModelCommons on Android | ModelCommons Hub | Hub-owned Binder worker; device acceptance pending |
 
-Create the configuration once at the composition root, not in feature screens:
+A shared request must not call the private provisioning/import path or fall back
+to another provider. Any separate cloud or LAN mode belongs to the consumer's
+explicit product configuration, not the ModelCommons protocol.
 
-```ts
-import { ModelCommons, createClientConfiguration } from '@modelcommons/client';
+## Reuse the integration pattern
 
-const config = createClientConfiguration({
-  id: 'sales-and-pricing-mobile',
-  displayName: 'Sales & Pricing',
-  capabilities: ['text', 'tools', 'structured-output'],
-  fallback: 'unavailable',
-  profile: 'safe',
-  context: 2048,
-  maxOutput: 512,
-  transports: ['local-runtime', 'hub-service'],
-});
+Build matching local packages with the [getting-started guide](../getting-started.md).
+The public [`dual-local.ts`](../../examples/reference-client/dual-local.ts) example
+shows reusable composition without depending on Sales & Pricing source.
 
-const client = await ModelCommons.connect({
-  clientConfiguration: config,
-  transportFactory: createSalesAndPricingTransport, // application-owned for now
-});
-```
+For iOS, the consumer combines `@modelcommons/native`, a read-only
+`@modelcommons/model-store`, `@modelcommons/embedded`, the canonical client,
+and its own pinned runtime. It supplies trusted catalog metadata and validates
+a candidate connection before replacing a working one. Use the
+[iOS contract](../platforms/ios.md) for plugin configuration and lease handling.
 
-The returned transport must declare the path it implements. The built-in
-`InProcessTransport` defaults to `local-runtime`; a different custom transport
-must expose its preference itself or in its availability result, or the caller
-must set the matching `transportPreference` in `connect()`. Once the transport
-is available, the client rejects conflicting declarations and a path absent
-from `config.access.transports`.
+For Android, configure explicit Hub package visibility, the installed signing
+certificate pin, and user approval. Use `createAndroidBinderTransport` from the
+native connector; the consumer does not include the Hub-only worker. See the
+[Binder acceptance guide](../verification/android-binder-inference-owner-run.md).
 
-That allowlist does not make `connect()` try `local-runtime` and then
-`hub-service`: it classifies one supplied transport. Sales & Pricing must own any
-user-visible transport choice/failover policy and instantiate exactly that path.
-The client post-validates custom resolution, but the transport/runtime must still
-apply the requested context during native initialization.
+## Application responsibilities
 
-`fallback: 'unavailable'` is deliberate: offline AI being unavailable is safer
-than silently sending customer data to a cloud provider. If the product offers a
-cloud fallback, it must be a separate, explicit user/admin decision with its own
-privacy policy.
+- Keep business rules, authentication, customer data and output validation in
+  the consumer application.
+- Select one local route explicitly and request only its supported text subset.
+- Cancel on backgrounding, identity changes and mode/model changes; suppress
+  stale results and wait for context/lease cleanup before admitting new work.
+- Release the runtime context before releasing shared-file access.
+- Export only sanitized diagnostic metadata, never prompts, responses, customer
+  records, raw filenames, bookmarks, tokens or container identifiers.
 
-## Provider behavior
-
-For each operation:
-
-1. call `getAvailability()` and return the application's existing unavailable
-   state when not `AVAILABLE`;
-2. create a session with the smallest capability set and context needed;
-3. convert existing messages into canonical content blocks;
-4. pass an `AbortSignal`, stream deltas if the current provider interface allows
-   it, and always `release()` in `finally`;
-5. validate every tool argument and structured result in Sales & Pricing; and
-6. map typed ModelCommons errors into existing retry/UX categories without
-   logging content.
-
-Example session shape:
-
-```ts
-const session = await client.createSession({
-  capabilities: ['text', 'tools', 'structured-output'],
-  profile: 'safe',
-});
-
-try {
-  const response = await session.generate({
-    messages: [{
-      role: 'user',
-      content: [{ type: 'text', text: requestText }],
-    }],
-    tools: approvedToolSchemas,
-    toolChoice: { type: 'auto' },
-    responseFormat: {
-      type: 'json_schema',
-      name: 'pricing_result',
-      schema: pricingResultSchema,
-      strict: true,
-      guarantee: runtimeGuarantee,
-    },
-    maxOutputTokens: 512,
-  }, { signal });
-  return validatePricingResult(response);
-} finally {
-  await session.release();
-}
-```
-
-`runtimeGuarantee` must come from the resolved runtime capability. Never label a
-prompt-only JSON request `grammar`. Reject the operation if the business flow
-requires a stronger guarantee than the loaded model/runtime can provide.
-
-## Tool boundary
-
-Good tools are narrow reads/calculations such as looking up an authorized local
-catalog row or calculating a formula from already-authorized inputs. The model
-does not receive a database, filesystem, HTTP client, credential, or arbitrary
-query executor.
-
-For each generated call, the application verifies the exact tool name, JSON
-schema, tenant/user authorization, record scope, numeric/locale/currency rules,
-and output size. Price publication, customer communication, contractual quotes,
-data mutation, and any external request require deterministic business rules and
-appropriate human confirmation. Model text is never the source of record.
-
-## Diagnostics and retention
-
-Allow only coarse operational fields: actual model/revision, runtime/profile,
-success/failure category, initialization/generation timing, and token counts.
-Exclude prompts, completions, customer/account IDs, tool arguments/results,
-quotes, SKUs, employee identity, and free-form metadata. Keep benchmarks local
-unless an enterprise administrator explicitly configures collection.
-
-## Rollout
-
-1. Text-only, read-only internal feature using `safe` and a fixed model.
-2. Structured output with application validation and golden compatibility cases.
-3. Read-only tools with audited authorization and human-visible trace.
-4. Streaming/cancellation and memory/thermal soak tests.
-5. Optional Android hub mode after its native security matrix passes.
-
-At every phase retain the current provider as an explicit user/admin-selected
-option and a clean feature-disabled state. Do not silently change execution
-location during a retry.
+The successful demonstration used synthetic text through the canonical client.
+It does not establish production pricing decisions, tool execution, structured
+output guarantees, or official OpenAI/Anthropic SDK support. Those features need
+separate application validation and device evidence.

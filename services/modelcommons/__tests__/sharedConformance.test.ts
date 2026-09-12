@@ -13,7 +13,9 @@ vi.mock('react-native', () => ({ Platform: f.platform }));
 vi.mock('../catalog', async () => {
   const { SMOLLM2_135M_INSTRUCT: base } = await import('@modelcommons/model-store/catalog');
   const { createHash } = await import('node:crypto');
-  return { MODEL_CATALOG: [{ ...base, files: base.files.map((file) => ({ ...file,
+  return { MODEL_CATALOG: [{ ...base,
+    memory: { ...base.memory, fileBytes: 3 * base.files.filter((file) => file.required).length },
+    files: base.files.map((file) => ({ ...file,
     sizeBytes: 3, integrity: { algorithm: 'sha256', digest: createHash('sha256').update('abc').digest('hex') },
   })) }] };
 });

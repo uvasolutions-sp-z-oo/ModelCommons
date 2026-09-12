@@ -1,10 +1,22 @@
 # Android Binder inference — owner-run verification
 
-Status, 2026-09-11: implementation source added. The owner's first validation run passed 22 of 23 selected TypeScript tests; typecheck found missing cache settings in the initialization test fixture, and the native-error test incorrectly required an omitted `cause` property. Both fixtures are corrected in source, **awaiting an owner rerun**. The owner also installed dependencies and packed nine consumer packages, but that pack ran after failed checks and is not validation evidence. Native compilation, signed-device verification and release support remain unverified. No installs, test runs, package repacks, native builds, EAS operations, model downloads, credential changes, app-data deletion or Git writes were performed by the agent. Preserve the separate [iOS acceptance gate](ios-shared-models.md).
+Current status, 2026-09-12: the owner reports successful EAS builds for Sales &
+Pricing Mobile on Android/iOS and ModelCommons on iOS. ModelCommons' Android
+build failed at `worker.cpp` because llama.rn 0.12.9 uses `load_mode` instead of
+`use_mmap`. That setting is corrected, and all 194 native build steps completed,
+including linking `libmodelcommons_host.so`, using NDK 27.0.12077973, API 24,
+arm64-v8a and RelWithDebInfo. A successful replacement EAS Android bundle and
+the two-app Binder device test have not been recorded here.
+
+The native-library build is not a full Android release or device verification.
+The separate [iOS Files milestone](ios-shared-models.md) is owner-verified.
 
 ## Architecture and source authority
 
-Latest owner evidence: S&P's selected suite now passes **31/31**. Both Android prebuilds completed, and autolinking listed the host only in Hub and the connector in both apps. Both native builds stopped at connector Kotlin compilation: a missing `MAX_IDENTIFIER_BYTES` constant and a repeated `@Synchronized` annotation. Source now defines the existing 256-byte limit once for service/client use and keeps one synchronization annotation. Native compilation remains **awaiting an owner rerun**. These native source corrections require a fresh consumer package archive/install before retrying the S&P build.
+Historical build notes, 2026-09-11: earlier checks exposed a missing
+`MAX_IDENTIFIER_BYTES` constant and a duplicated `@Synchronized` annotation.
+Those source corrections preceded the later EAS builds and native-host fix
+summarized above. Rebuild matching native connectors when their source changes.
 
 `S&P local_modelcommons → @modelcommons/native createAndroidBinderTransport → AndroidHubClient → Binder API 2 → ModelCommonsService → process-wide InferenceCoordinator → optional @modelcommons/inference-host → isolated JNI/llama.cpp CPU worker`.
 

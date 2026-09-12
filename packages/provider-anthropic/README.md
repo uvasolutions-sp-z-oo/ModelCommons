@@ -28,7 +28,7 @@ The backend must:
 - emit JSON tool-argument deltas that are a prefix of the completed `rawArguments`;
 - observe the supplied `AbortSignal` and release execution exactly once.
 
-The early usage requirement avoids fabricating `message_start.usage.input_tokens`. A violation becomes a streamed `api_error`.
+The early usage requirement avoids fabricating `message_start.usage.input_tokens`. A violation becomes a streamed `api_error`. The current ModelCommons llama.rn runtime only emits usage at completion, so streaming through the embedded/shared-files composition does not yet satisfy this contract. The canonical iOS demo and non-streaming Messages do not establish Anthropic streaming support.
 
 The adapter accepts only API version `2023-06-01`. It rejects missing/unknown versions and `anthropic-beta` rather than silently accepting beta semantics.
 

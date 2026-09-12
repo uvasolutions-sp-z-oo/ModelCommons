@@ -1,11 +1,13 @@
 # Model store and publication lifecycle
 
-Status as of 2026-08-27: protocol types/validators and an Expo host-side store in
-`services/modelcommons/` exist. The store implements a bundled catalog,
-license-gated resumable downloads, size/SHA-256 verification through the native
-module, recoverable registry writes, deletion hooks, startup repair, and a
-legacy MedGemma migration. It is application service code, not yet a published
-standalone package, and still requires physical-device verification.
+Status, 2026-09-12: the Hub store lives in `services/modelcommons/`; reusable
+registry, policy, private storage and read-only shared composition live in
+`@modelcommons/model-store`. The owner verified a Files-based iOS consumer using
+a model stored by the Hub; see the [device record](../verification/ios-shared-models.md).
+Recovery, deletion, concurrency, App Groups, and broader lifecycle cases still
+need physical testing. The Hub's resumable downloader and the generic private
+store's explicit retry path have different responsibilities; neither path permits
+unverified artifacts to be treated as ready.
 
 ## Goals
 

@@ -118,7 +118,7 @@ describe.each(['app-private', 'shared-files'] as const)('%s composition without 
     await expect(client.createSession({ capabilities: ['text'], modelId: manifest.id })).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' });
     await f.backend.release();
   });
-  it('feeds the same OpenAI and Anthropic text adapters without global fetch or fallback', async () => {
+  it('routes provider adapters locally and rejects Anthropic streaming without early usage', async () => {
     const f = fixture(ownership);
     const network = vi.fn(() => { throw Error('Network forbidden'); });
     vi.stubGlobal('fetch', network);
@@ -135,7 +135,17 @@ describe.each(['app-private', 'shared-files'] as const)('%s composition without 
       const result = await fetcher(`https://modelcommons.local${route}`, { method: 'POST', headers, body: JSON.stringify(body) });
       expect(result.status).toBe(200); expect(await result.text()).toContain(manifest.id);
       const stream = await fetcher(`https://modelcommons.local${route}`, { method: 'POST', headers, body: JSON.stringify({ ...body, stream: true }) });
-      expect(stream.status).toBe(200); expect(await stream.text()).toContain('bicycle');
+      expect(stream.status).toBe(200);
+      const events = await stream.text();
+      if (fetcher === anthropic) {
+        // The llama.rn-shaped fixture reports usage at completion, not before
+        // text. Preserve the adapter's honest failure instead of inventing usage.
+        expect(events).toContain('event: error');
+        expect(events).toContain('input-token usage before the first content event');
+        expect(events).not.toContain('bicycle');
+      } else {
+        expect(events).toContain('bicycle');
+      }
     }
     const invalid = await openai('https://modelcommons.local/v1/responses', {
       method: 'POST', headers, body: JSON.stringify({ model: manifest.id, input: 'Synthetic', tools: [{ type: 'web_search' }] }),

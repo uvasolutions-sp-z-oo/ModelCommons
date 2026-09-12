@@ -1,179 +1,118 @@
-# iOS sharing implementation handoff — 2026-09-11
+# iOS shared-model verification
 
-## Status and source findings
+Recorded: **2026-09-12**. Status: **owner-verified physical-device proof of concept**.
+This page records the owner's reported test and distinguishes it from source
+inspection, automated tests, and acceptance cases still to be run.
 
-Files and App Group changes are prepared in the working trees. Neither path is
-device-verified. Android Binder execution is unchanged and unavailable; its second
-prompt has not been implemented concurrently with this work.
+## Result
 
-The initial ModelCommons tree contained only the two untracked implementation
-prompts; S&P was clean. Both roots were available and source edits succeeded.
-ModelCommons origin is `https://github.com/asierraserna/ModelCommons.git`, different
-from the prompt's expected remote; S&P origin matches the expected internal-history
-repository. Current local source was used. No branches or remotes were changed.
+On a physical **iPhone SE**, Sales & Pricing Mobile generated a real response in
+airplane mode using a model downloaded only in ModelCommons. The owner deleted
+the consumer app's private local model, connected using the **Files folder
+picker**, and selected **Shared with ModelCommons**. The result details displayed
+**`Provider: LOCAL_MODELCOMMONS`**.
 
-The source already had in-place folder selection, bookmarks, trusted generic
-readers, working private composition, context-before-lease release and the URI
-decoding fix. The gaps addressed here are full-lifetime coordination, lease-local
-verification, candidate validation, missing-file/empty-store handling, a real
-explicit App Group writer, and observed sharing diagnostics. The native module's
-Apple registration, llama.rn 0.12.9, memory entitlements, reporting configuration,
-cloud/LAN choices and identity boundaries remain in place.
+Storage owner: **ModelCommons shared storage**.
+Execution owner: **Sales & Pricing Mobile**.
 
-## Changed source groups
+The reported setup and result demonstrate reuse of the shared model file without
+a second consumer download in that test. The consumer still owns its runtime,
+context, and memory allocations. This was a Files test, not an App Group test.
 
-| Location | Change |
+## Recorded setup
+
+| Field | Recorded value |
 | --- | --- |
-| `modules/model-commons-native/ios/CoordinatedModelRead.swift` | Bounded full-lifetime coordinated read, timeout/late-activation exclusion, independent release |
-| `SharedModelConnector.swift`, `ModelCommonsNativeModule.swift` | Lease integration, direct-local-folder admission, owner group resolver, coordinated metadata replacement, separate work queues |
-| `PrivateModelFiles.swift`, native TS exports/types/sharedStore | Owner-test private inventory/counters, lease-local inspection/hash and acquisition observation |
-| `packages/model-store/src/store.ts` | Verify via held artifact leases, retain auxiliary leases, propagate cleanup failure |
-| `packages/embedded/src/index.ts` | Report resolved resource before init; retain/retry failed pre-init lease cleanup |
-| `services/modelcommons/modelStore.ts`, `app.config.ts`, native plugin | Explicit optional App Group destination for all Hub storage/inference operations; default Documents preserved |
-| `app/(tabs)/clients.tsx`, `.env.example` | Actual destination, sharing instructions and limitations |
-| S&P `localBridge.native.js`, `sharedConnection.js`, `LocalAISettings.js` | Transactional candidate selection, shared states/errors, cancellation before init, observed request-local evidence |
-| S&P `localDiagnostics.js` | Sanitized report version 4; unknown values stay null and no-resource cleanup is distinct |
-| Focused TS/Node/Swift test files | Publication conformance, candidate rollback, actual consumer bridge boundary, lease lifetime, sanitization and cleanup regressions |
+| Device | Physical iPhone SE; generation not recorded |
+| iOS version | Not recorded |
+| Hub | ModelCommons; exact version/build not recorded |
+| Consumer | Sales & Pricing Mobile; exact version/build not recorded |
+| Model / quantization / revision / SHA-256 | Not recorded |
+| Connection | iOS Files folder picker |
+| Transport | `ios-shared-files`, identified from the confirmed connection path; raw diagnostic export not attached |
+| Consumer mode | Shared with ModelCommons |
+| Provider shown | `LOCAL_MODELCOMMONS` |
+| Starting state | Owner reports deleting the consumer's private local model |
+| Provisioning | Model downloaded only in ModelCommons |
+| Connectivity | Airplane mode, reported offline by the owner; separate radio states not recorded |
+| Outcome | Real response generated successfully |
+| Test date/time and source/build identity | Exact run timestamp and commit identities not recorded; report preserved on 2026-09-12 |
 
-See [the platform contract](../platforms/ios.md) for coordination, provider and
-remaining pathname-race assumptions. Exact descriptor identity is not passed to
-llama; noncooperative writers remain a risk. iOS deletion stays deferred.
+No model identity or SE generation is inferred from the timings or the catalog.
+Repository versions alone do not establish the identity of the installed binaries.
 
-## Owner-run checks and coherent package refresh
+## Observed timings
 
-These commands are instructions only; none were executed by the agent. Use the
-existing pinned local tools. Each command occupies one line.
+The owner supplied these values from one successful turn:
 
-```powershell
-Set-Location -LiteralPath 'D:\GitHub\ModelCommons'
-npm run test -- services/modelcommons/__tests__/sharedConformance.test.ts services/modelcommons/__tests__/migration.test.ts packages/model-store/src/__tests__/store.test.ts packages/embedded/src/__tests__/embedded.test.ts modules/model-commons-native/src/__tests__/sharedStore.test.ts modules/model-commons-native/src/__tests__/nativeError.test.ts packages/runtime-llama-rn/src/__tests__/initialization.test.ts packages/runtime-llama-rn/src/__tests__/runtime.test.ts
-npm run typecheck
-npm run packages:pack-local -- 'D:/GitHub/spm/vendor/modelcommons'
-```
+| Displayed metric | Time |
+| --- | ---: |
+| First text | 1,547 ms |
+| Inference | 1,774 ms |
+| Whole turn | 1,840 ms |
 
-Source changes affect native, model-store and embedded archives. The pack script
-rebuilds/repackages **all nine** packages in the dependency closure. Archive bytes
-and provenance are generated by that command; no new archive/hash is claimed here.
-Refresh all nine S&P dependencies together. The following npm-managed remove and
-reinstall avoids retaining old integrity for the same `0.1.0` local tarball paths.
-It temporarily removes the nine manifest entries; complete both commands before
-building, and inspect the resulting package/lock diff. It does not remove models
-from any device. Do not delete the entire lockfile or edit integrity values.
+These are observations from one run, not a benchmark or a speed guarantee.
+Cold/warm state, token counts, model identity, and repeat-run variation were not
+recorded. The metrics have different boundaries and must not be added together.
 
-```powershell
-Set-Location -LiteralPath 'D:\GitHub\spm'
-npm uninstall --ignore-scripts --no-audit --no-fund @modelcommons/client @modelcommons/device-profile @modelcommons/embedded @modelcommons/model-store @modelcommons/native @modelcommons/protocol @modelcommons/provider-anthropic @modelcommons/provider-openai @modelcommons/runtime-llama-rn
-npm install --save-exact --ignore-scripts --no-audit --no-fund ./vendor/modelcommons/modelcommons-client-0.1.0.tgz ./vendor/modelcommons/modelcommons-device-profile-0.1.0.tgz ./vendor/modelcommons/modelcommons-embedded-0.1.0.tgz ./vendor/modelcommons/modelcommons-model-store-0.1.0.tgz ./vendor/modelcommons/modelcommons-native-0.1.0.tgz ./vendor/modelcommons/modelcommons-protocol-0.1.0.tgz ./vendor/modelcommons/modelcommons-provider-anthropic-0.1.0.tgz ./vendor/modelcommons/modelcommons-provider-openai-0.1.0.tgz ./vendor/modelcommons/modelcommons-runtime-llama-rn-0.1.0.tgz
-npm ls @modelcommons/native @modelcommons/model-store @modelcommons/embedded @modelcommons/client @modelcommons/protocol @modelcommons/device-profile @modelcommons/runtime-llama-rn @modelcommons/provider-openai @modelcommons/provider-anthropic
-Get-Content -LiteralPath 'vendor/modelcommons/provenance.json'
-Get-Content -LiteralPath 'node_modules/@modelcommons/native/expo-module.config.json'
-Get-Content -LiteralPath 'node_modules/@modelcommons/native/ios/CoordinatedModelRead.swift'
-Select-String -Path 'node_modules/@modelcommons/model-store/dist/store.js' -Pattern 'resourceCleanupFailed'
-Select-String -Path 'node_modules/@modelcommons/embedded/dist/index.js' -Pattern 'onResource|orphanedLease'
-git diff -- package.json package-lock.json vendor/modelcommons/provenance.json
-node --experimental-vm-modules --test test/localSharedBridge.test.js test/sharedConnection.test.js test/localAIBoundaries.test.js test/localAIProvisioning.test.js test/localAIBuildConfig.test.js
-```
+## Test sequence reported by the owner
 
-The bridge test evaluates the actual native JS module with synthetic dependencies;
-it skips if VM module support is absent. This is not native runtime proof. The
-existing EAS post-install hook prepares the pinned llama native payload. Local
-package refresh is separate from npm publishing.
+1. Delete the local model in Sales & Pricing Mobile.
+2. Download the model in ModelCommons only.
+3. Connect Sales & Pricing Mobile to the shared store through the Files folder
+   picker and select **Shared with ModelCommons**.
+4. Enable airplane mode.
+5. Run the synthetic test in Sales & Pricing Mobile.
+6. Observe the real generated response and `LOCAL_MODELCOMMONS` provider details.
 
-Optional Foundation-only native worker checks, on a Mac checkout with Xcode tools:
+The source has no automatic fallback from this shared route to private or network
+inference. A raw `fallback=false` diagnostic and before/after private-store
+counters have not been attached; they are not represented here as captured fields.
 
-```sh
-xcrun swiftc modules/model-commons-native/ios/SharedModelConnector.swift modules/model-commons-native/ios/CoordinatedModelRead.swift modules/model-commons-native/native-tests/SharedReadChecks.swift -o /tmp/modelcommons-shared-read-checks
-/tmp/modelcommons-shared-read-checks
-```
+## Evidence to attach
 
-These synthetic temporary-file checks cover accessor lifetime, cooperative writer
-blocking/release, timeout without late activation and path/symlink confinement.
-They do not exercise UIKit, real security-scoped grants, suspension or llama mmap.
+This record currently contains the owner's report and transcribed timing values.
+Screenshots, a screen recording, and a sanitized diagnostic export are **not yet
+attached**. Preserve the originals privately; commit only reviewed copies showing
+synthetic content and no customer data, credentials, bookmarks, container paths,
+or device identifiers.
 
-## Owner-only configuration and signed builds
+Useful additions are the exact SE generation and iOS version, both app build
+numbers, model/revision/checksum, screenshot of shared mode and result details,
+and a same-request diagnostic export showing acquisition, cleanup, and the
+consumer's private-store inventory/counters before and after the turn. Missing
+measurements stay unknown rather than being recorded as zero.
 
-Files: leave `MODELCOMMONS_IOS_STORE` unset or `documents`. No App Group provisioning
-is needed. Initialize the Hub's existing store and use its Models screen to
-download/verify SmolLM2 135M or 360M once. Do not select private import in S&P.
+## Reproduce and extend
 
-Optional App Group: register one actual group in the owner's Apple developer team,
-associate it with both existing app IDs, and refresh matching provisioning profiles.
-`group.com.uvasolutions.modelcommons` is only a suggestion until registered. Do not
-assume registration or that the existing app IDs currently share a team. Set Hub
-`MODELCOMMONS_APP_GROUP` to the registered value and `MODELCOMMONS_IOS_STORE=app-group`
-in the selected EAS environment. In S&P set `localAI.appGroup` in
-`config/apps/uva.json` to that same value; the source has no S&P App Group env key.
-Keep its existing `localAI` properties if present. No signing IDs/credentials were
-changed by this implementation.
+Use native builds with matching ModelCommons consumer packages. See
+[getting started](../getting-started.md) and the [iOS platform contract](../platforms/ios.md).
 
-Build both apps after the package refresh and any optional provisioning:
+1. Use a test consumer installation without a private GGUF, or remove its model
+   explicitly through the app. Inspect any legacy model locations separately.
+2. Install a compatible catalog model in ModelCommons' default Documents store.
+3. In the consumer's Files picker, choose the exact `ModelCommons` folder that
+   contains `protocol.json` and `registry.json`; choose the installed model.
+4. Enable airplane mode and explicitly turn Wi-Fi off. Generate a synthetic
+   prompt. Save the result and sanitized diagnostics through the app's controls.
+5. Record the build/device/model identities, shared acquisition and transport,
+   successful completion, cleanup, private artifact inventory, and download/import
+   counters. Counters cover SDK entry points, not OS-wide I/O.
+6. Repeat after restarting the consumer and closing the Hub. Test cancellation,
+   background/foreground, stale or revoked access, and reconnection separately.
 
-```powershell
-Set-Location -LiteralPath 'D:\GitHub\ModelCommons'
-eas build --platform ios --profile preview
-Set-Location -LiteralPath 'D:\GitHub\spm'
-npm run build:uva:preview:ios
-```
+The full [implementation handoff](ios-implementation-handoff.md) preserves the
+original package-refresh instructions and extended acceptance cases.
 
-New Swift/plugin methods require new signed binaries; an OTA JS update is
-insufficient. The reader rejects native leases lacking the new coordination marker.
-App Group models must be installed directly into the selected group
-store. Existing Documents artifacts stay allocated; there is no automatic migration
-or duplicate cleanup. App Group success does not establish Files success.
+## Limits of this milestone
 
-## Physical acceptance and no-copy evidence — all unverified
+App Groups, unrelated-team signing, other devices, restart/bookmark persistence,
+Hub-closed operation, cancellation, memory pressure, revocation, and destructive
+file-mutation cases are not established by this one successful turn. Android
+Binder inference has a [separate verification gate](android-binder-inference-owner-run.md).
 
-Record device/model, iOS, both build identifiers, both source commits plus working
-diff identity, signing channel, runtime, model ID and immutable revision. Inspect
-the Hub's exposed Documents area for unrelated old/user-created sensitive files.
-
-1. Use a clean S&P test installation with no private GGUF. If existing models must
-   be removed, the owner explicitly confirms their removal in the app; no test
-   script or migration removes user data. Inventory covers only the SDK's
-   `Application Support/ModelCommonsPrivate` tree, so clean installation or manual
-   inspection must exclude legacy/private copies outside that root.
-2. Download/verify ungated SmolLM2 in the Hub's Documents store only. In S&P select
-   ModelCommons mode and the exact local folder with marker and registry. Refresh
-   compatible models and choose that installed model. Selecting a folder alone
-   does not prove artifact readiness or inference.
-3. Enable airplane mode and explicitly turn Wi-Fi off. Reopen S&P, generate the
-   synthetic blue-bicycle sentence and retain the separately selectable response.
-   Export the sanitized report only through the existing user action.
-4. Require report transport `ios-shared-files`, nativeSharedAcquisition `true`,
-   correct verified size/digest and model/revision, application execution owner,
-   real completion and `cleanup=released`. Require privateBefore/privateAfter
-   artifactCount and artifactBytes both zero, and unchanged native download/import
-   attempt counters. Null means not measured, not zero. Counters cover the native
-   private provisioning/import-copy entry points; they are not OS-wide I/O tracing
-   or downloaded-byte accounting. They include failed attempts and reset with the
-   native module instance. Keep both snapshots in the same request/process.
-5. Repeat after S&P restart and with the Hub closed. Cancel then start another
-   request; check background/foreground and identity/mode/model changes suppress
-   old callbacks and do not allow another context until drain completes.
-6. Exercise wrong folder, picker cancellation, valid empty store, incompatible
-   metadata, cloud/third-party rejection, stale bookmark, moved/deleted/revoked
-   access, re-selection and disconnect. Preserve the previous connection on
-   invalid/cancelled selection. Exercise cooperative mutation only with synthetic
-   disposable files; never truncate or replace a live production GGUF.
-7. Recheck private embedded download/import/inference and cloud/LAN selection;
-   shared mode must not invoke those other routes. Test iPhone safe areas and the
-   read-only shared controls, including the absence of private license/download
-   actions. Android embedded and web behavior need regression checks as applicable.
-8. Run the App Group scenario separately with `ios-app-group`, direct group
-   provisioning, no consumer private GGUF, offline generation, restart and cancel.
-
-Equal hashes alone prove equal bytes, not one physical copy. Combine the clean
-private starting state, observed shared acquisition, scoped operation counters,
-source boundary and offline completion. Do not claim zero overall app storage,
-memory sharing, tamper-proof files, or unrelated-team testing. Two same-team apps
-using Files establish only that tested relationship; separately signed clients
-remain an additional gate before announcing cross-team validation.
-
-## Verification performed during implementation
-
-Only read-only source/Git inspection (`Get-Content`, `rg`, `Get-Item`, `git status`,
-`git remote -v`, `git rev-parse`, `git diff`, `git diff --check`), Apple documentation lookup, and
-working-tree edits (`apply_patch` and Python file-edit scripts) were performed.
-Diff review is not a typecheck or compilation result. No tests/typechecks, installs,
-model downloads, pack scripts, native/prebuild/EAS builds, signing changes, Git
-staging/commits/pushes/PRs, or publication actions were run.
+A matching hash proves equal bytes, not a physical-copy count. The reported
+no-second-download result rests on the owner's clean consumer setup, explicit
+shared route, and offline completion; no filesystem forensic or RAM-deduplication
+claim is made. This evidence supports a pre-alpha proof of concept, not production
+readiness or a completed privacy/security assessment.

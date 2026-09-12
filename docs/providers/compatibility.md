@@ -1,6 +1,12 @@
 # Provider compatibility
 
-Research and implementation snapshot: **2026-08-27**.
+Wire-subset baseline: **2026-08-27**. Composition status updated **2026-09-12**.
+
+The owner-verified iOS shared-model demo uses the canonical client, not an official
+provider SDK. The current llama.rn runtime emits usage at completion; therefore
+Anthropic streaming through that composition fails with a streamed `api_error`
+until a backend supplies accurate input-token usage before content. Non-streaming
+responses and adapter fixtures have separate contracts. No early counts are fabricated.
 
 ModelCommons is independent of OpenAI and Anthropic. “Compatible” means an
 intentional subset of request/response wire shapes can map to the neutral

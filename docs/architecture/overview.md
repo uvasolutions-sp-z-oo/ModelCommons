@@ -191,24 +191,23 @@ See the [threat model](../security/threat-model.md) for required controls.
 
 ## Current implementation boundary
 
-The protocol, pure client, device-profile resolver, llama.rn runtime adapter,
-and both provider adapters are generic packages. The Expo host also has a
-generic catalog/store service with integrity and migration behavior, but it is
-not yet extracted as a reusable package and needs physical-device verification.
+Protocol, client, device profiles, model store, embedded composition, runtime and
+provider adapters are reusable workspace packages. The local pack script creates
+nine consumer archives with compiled JavaScript and declarations; public npm
+publishing remains a separate milestone.
 
-These are source-workspace packages today. Their manifests export
-`./src/index.ts` directly and no package has a compiled JS/declaration output or
-build/prepack pipeline. Metro/TypeScript-aware workspace consumption is the
-current boundary; ordinary Node/npm package publication is not implemented.
+The owner verified the iOS Files flow on a physical iPhone SE: ModelCommons owns
+the shared model storage and Sales & Pricing Mobile owns offline execution.
+See the [evidence record](../verification/ios-shared-models.md) for captured facts
+and missing metadata. App Groups and separately signed clients are unverified.
 
-The generic text-only llama.rn runtime adapter and Android/iOS native connector
-code are present but unverified. Android Binder execution explicitly remains
-`RUNTIME_NOT_READY`; iOS shares storage, not execution. The current Hub UI and
-inference path are generic; MedGemma-specific material is confined to a catalog
-entry, the legacy migration/tests, and the reference example. None of that is
-proof that native security or physical-device behavior works.
+Android has a Binder API 2 connector and optional Hub-owned CPU host built from
+pinned llama.rn source. The native library compiles and links; signed two-app
+inference and security/lifecycle acceptance remain pending. Availability alone
+does not prove successful model loading or generation.
 
-The Hub now composes its model store, device/profile resolution, in-process
-client transport, llama.rn sessions, and both provider backends. That is a real
-vertical slice in code, but it has not passed static/unit/native verification in
-this work and must not be called supported on a device.
+The Hub is generic. MedGemma-specific material remains confined to catalog,
+migration/tests and an isolated reference example. Provider-shaped adapters have
+contract tests, but official mobile SDK acceptance is pending. The current
+llama.rn stream also lacks the early input usage required for Anthropic streaming;
+that adapter fails explicitly rather than fabricating token counts.

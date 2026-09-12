@@ -2,6 +2,10 @@
 
 Optional ModelCommons runtime adapter pinned to `llama.rn` 0.12.9 (embedded llama.cpp build b10256).
 
+The owner-verified [iOS Files milestone](../../docs/verification/ios-shared-models.md)
+uses this runtime in the consuming application. It establishes one text scenario,
+not general model, accelerator or lifecycle coverage.
+
 The package deliberately makes `llama.rn` an optional peer. Installing `@modelcommons/client` or the protocol packages must not download native inference binaries; only applications that choose this runtime install the exact peer.
 
 The default pool permits one loaded model/profile context and serializes completions. This is intentional for phone memory safety. Sessions with the same model, lease and profile share that context while active; the final session release destroys the native context immediately. A security-scoped model lease is released only after `context.release()` resolves.

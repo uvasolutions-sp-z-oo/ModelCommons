@@ -40,21 +40,19 @@ tool payloads.
 
 ## Local checks
 
-This refactor snapshot intentionally has no reviewed workspace lock. Generate it
-once in a correctly configured environment:
+Use Node.js 22 and the committed workspace lockfile:
 
 ```sh
-npm install
+npm ci
 npm run lint
 npm run typecheck
 npm test
 ```
 
-Review and commit the generated `package-lock.json` before publication. After a
-reviewed lock exists, contributors should use `npm ci` rather than silently
-changing resolution. A local 2026-08-27 lock-only attempt failed at the
-TLS-certificate/offline-cache boundary, so dependency checks were not completed.
-See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+The [getting-started guide](docs/getting-started.md) covers native builds, optional
+configuration, and local client packages. CI runs the source checks on Node.js 22
+without native install hooks; native build and physical-device evidence remain
+separate. Keep dependency updates deliberate and review their lockfile changes.
 
 Run any additional package-specific contract check documented by the package you
 change. Do not substitute Expo Go for a development build when testing native
@@ -107,10 +105,11 @@ Use `implemented; requires physical-device verification` when that is the most
 accurate status. Do not report a native capability as working based only on
 TypeScript compilation or generated native projects.
 
-Do not publish a workspace package directly from its current manifest. Exports
-still target TypeScript source and there is no build/prepack pipeline. Package
-publication requires reviewed compiled JS/declarations, export conditions,
-files/tarball inspection, consumer smoke tests, and the reviewed lock/SBOM.
+Workspace manifests target TypeScript source. Use `npm run packages:pack-local`
+with an explicit consumer `vendor/modelcommons` directory to create compiled
+JS/declarations and matching native source archives. Public npm publishing still
+requires reviewed export conditions, tarball contents, consumer smoke tests,
+versioning, and dependency notices. Do not publish the source manifests directly.
 
 ## Provenance
 

@@ -1,13 +1,14 @@
 # Reference clients
 
-These are three small integration boundaries over the packages that exist as of
-2026-08-27:
+These examples show integration boundaries over the current workspace packages:
 
 1. [`native.ts`](native.ts) — canonical ModelCommons client over an in-process
    llama.rn runtime;
-2. [`openai.ts`](openai.ts) — OpenAI-shaped local fetch and client options; and
+2. [`openai.ts`](openai.ts) — OpenAI-shaped local fetch and client options;
 3. [`anthropic.ts`](anthropic.ts) — Anthropic Messages-shaped local fetch and
-   client options.
+   client options; and
+4. [`dual-local.ts`](dual-local.ts) — private/shared-store composition with the
+   reusable embedded backend.
 
 They do not contain a fake model, fake output, cloud fallback, embedded API key,
 or provider-name alias. Callers supply a verified model URI/lease or a real
@@ -44,7 +45,9 @@ application supplies a client configuration, the client enforces its capability,
 format, runtime, context, fallback, alias, defaults, and declared transport-access
 policy; it is not merely advisory.
 
-The code is implementation-consistent but remains unverified on physical devices.
+These helper functions have not independently been exercised on physical devices.
+The separate [Sales & Pricing iOS Files run](../../docs/verification/ios-shared-models.md)
+verifies that application's canonical shared-model integration.
 
 ## Provider-shaped examples
 
@@ -86,6 +89,10 @@ Both adapters refuse any origin other than exact
 `https://modelcommons.local`, have no delegate fetch, set client retry to zero,
 and fail unknown routes/fields locally. Never patch `globalThis.fetch` or add a
 catch-all network fallback.
+
+The current llama.rn runtime supplies usage at completion. Its Anthropic streaming
+composition therefore fails the early-usage contract; see the
+[adapter requirements](../../packages/provider-anthropic/README.md).
 
 ## Backend requirements
 

@@ -120,7 +120,7 @@ logger is disabled by default, user-controlled, and accepts an explicit metadata
 allowlist rather than prompts or responses. Those are source-code properties,
 not a completed privacy assessment.
 
-Residual gaps as of 2026-09-10 are:
+Residual gaps as of 2026-09-12 are:
 
 - Hub runtime preferences, sanitized runtime-failure history, and authorization
   records are persisted in AsyncStorage. Rehydration now validates/bounds
@@ -139,8 +139,11 @@ Residual gaps as of 2026-09-10 are:
   fields never contain user content.
 - Android caller authorization, iOS bookmark/scope lifetime, platform backups,
   protected-data states, and cross-process file replacement have no
-  physical-device privacy evidence. The iOS connector also lacks
-  `NSFileCoordinator` around shared access.
+  comprehensive physical-device privacy evidence. The iOS connector now holds
+  `NSFileCoordinator` reads through the model-lease lifetime, but coordination
+  remains cooperative and the loader opens a pathname. The
+  [owner-verified offline Files run](docs/verification/ios-shared-models.md)
+  establishes functional reuse, not these privacy/lifecycle properties.
 - Any configured voluntary receiver still requires deployment,
   published-policy alignment, and physical-device verification. Community builds
   may omit it and operate normally without reporting. Reporting does not prevent

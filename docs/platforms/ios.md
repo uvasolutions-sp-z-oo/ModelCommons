@@ -1,10 +1,12 @@
 # iOS shared model storage
 
-Source status, 2026-09-11: Files sharing and the optional App Group writer have
-implementation changes and owner-run tests. No tests, native compilation, signed
-builds, or two-app device checks were executed for this change. Existing embedded
-inference was reported working by the owner; cross-app reuse remains unverified.
-See [the implementation handoff and acceptance procedure](../verification/ios-shared-models.md).
+Status, 2026-09-12: the owner verified **Files folder-picker sharing on a physical
+iPhone SE**, with a model installed only in ModelCommons and successful
+Sales & Pricing Mobile generation in airplane mode. See the
+[current device evidence](../verification/ios-shared-models.md). Exact model/build
+metadata and attachments remain unrecorded; App Groups and unrelated-team signing
+need separate verification. The [historical handoff](../verification/ios-implementation-handoff.md)
+preserves the implementation and extended acceptance procedure.
 
 ## Storage contract
 
@@ -14,7 +16,8 @@ A selected root contains `protocol.json`, `registry.json`, and
 The generic reader validates versioned metadata against its own pinned catalog;
 a producer's checksum does not establish trust. Listing checks presence and size;
 acquisition validates manifest identity and every required artifact's full SHA-256.
-License gates remain in force. The first demonstration uses ungated SmolLM2.
+License gates remain in force. The reproduction procedure suggests a small ungated
+SmolLM2 model; the original successful run's model identity is not yet recorded.
 
 Files is the default: the Hub continues to write directly to
 `Documents/ModelCommons`. Select that exact folder in the consuming application's
@@ -135,7 +138,8 @@ Each app creates its own llama context, KV cache and allocations. No shared iOS
 inference daemon or RAM deduplication is claimed. Android centralized execution
 remains a separate task.
 
-The current Hub source writes model metadata/artifacts to Documents; chat,
+The default Hub destination for model metadata/artifacts is Documents; an
+explicitly configured owner can instead select App Group storage. Chat,
 preferences and approval UI state use their existing private persistence, and
 reporting does not add Documents exports. The legacy model migration is the
 other Documents consumer. Existing user-created or old-version Documents files
@@ -145,4 +149,5 @@ S&P's Documents area is not exposed by its native plugin configuration.
 S&P diagnostic report v4 adds observed shared acquisition, verified artifact
 metadata, transport and bounded SDK-private GGUF inventory/call counters. It
 exports no content, filenames, URLs, bookmarks or physical file identifiers.
-Measurements are null when unavailable. See the handoff for their exact limits.
+Measurements are null when unavailable. See the
+[historical handoff](../verification/ios-implementation-handoff.md) for their exact limits.

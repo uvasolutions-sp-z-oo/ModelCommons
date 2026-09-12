@@ -51,7 +51,7 @@ extern "C" JNIEXPORT jintArray JNICALL Java_org_modelcommons_host_NativeWorker_r
     rewind(file.get());
     auto mp = llama_model_default_params();
     mp.n_gpu_layers = 0;
-    mp.use_mmap = true;
+    mp.load_mode = LLAMA_LOAD_MODE_MMAP;
     mp.progress_callback = [](float, void * p) { return !aborted(p); };
     mp.progress_callback_user_data = control;
     std::unique_ptr<llama_model, decltype(&llama_model_free)> model(

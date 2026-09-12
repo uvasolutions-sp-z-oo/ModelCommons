@@ -1,3 +1,8 @@
+> Historical implementation brief/checkpoint. Its instructions and status claims
+> describe earlier work, not the current release state. See the
+> [current documentation status](README.md) and
+> [iOS device evidence](verification/ios-shared-models.md).
+
 # Codex implementation prompt 1: Real iOS shared model reuse
 
 ## Mission and scope

@@ -1,7 +1,9 @@
 # Physical-device verification
 
-Last updated: 2026-09-10. This is a release gate and evidence template, not a
-record of completed testing. No device result is claimed in this repository yet.
+Last updated: 2026-09-12. The [iOS Files record](ios-shared-models.md) contains
+an owner-verified offline test on a physical iPhone SE. The broader matrix below
+remains an acceptance plan, not a list of completed tests. That one result does
+not establish App Group, unrelated-team, Android Binder or lifecycle coverage.
 
 Simulator/emulator tests remain useful for UI and protocol failures, but they do
 not validate native memory pressure, signing/entitlements, Binder identity,

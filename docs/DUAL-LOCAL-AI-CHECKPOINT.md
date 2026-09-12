@@ -1,3 +1,8 @@
+> Historical implementation brief/checkpoint. Its instructions and status claims
+> describe earlier work, not the current release state. See the
+> [current documentation status](README.md) and
+> [iOS device evidence](verification/ios-shared-models.md).
+
 # Dual local AI implementation checkpoint — 2026-09-09
 
 This is an incomplete implementation checkpoint, not a release or verification report. The master prompt remains the target. No tests, typechecks, package builds, installs, native builds, EAS operations, model downloads, signing, or Git writes were performed. Read-only inspection and `git diff --check` were performed. No physical-device evidence was produced.

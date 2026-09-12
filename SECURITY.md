@@ -8,8 +8,8 @@ offered yet.
 
 ## Reporting a vulnerability
 
-Use the repository's **GitHub Security Advisory** / private vulnerability
-reporting workflow. Do not disclose a suspected vulnerability in a public issue,
+Use the repository's [private vulnerability reporting form](https://github.com/asierraserna/ModelCommons/security/advisories/new)
+under **Security > Report a vulnerability**. Do not disclose a suspected vulnerability in a public issue,
 discussion, pull request, chat transcript, or provider fixture.
 
 Before publication, the owner must confirm that private vulnerability reporting

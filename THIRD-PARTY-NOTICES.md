@@ -1,6 +1,7 @@
 # Third-Party Notices and Review Ledger
 
-Last reviewed: **2026-08-27**.
+Source-preview ledger updated: **2026-09-12**. Model-source references below
+retain their earlier review dates; this update is not a fresh upstream-model audit.
 
 This file is a publication review aid. It is not a complete software bill of
 materials, attribution file, or legal opinion. Before public release, the owner
@@ -22,44 +23,47 @@ file can be distributed under the declared license. Do not treat the presence of
 
 ## Principal software dependencies
 
-All first-party workspace manifests currently declare version 0.1.0 and MIT:
-the protocol has no dependencies; the client and device-profile packages depend
-only on the protocol; provider adapters peer on the protocol; the runtime
-depends on the protocol and peers optionally on exact llama.rn 0.12.9 plus the
-React Native 0.81 line; and the native Expo module peers on Expo/React Native and
-depends on the protocol plus Expo config plugins. These declarations still need
-to be reconciled with the generated lock/publish artifacts described below.
+The repository includes a committed workspace `package-lock.json`. The
+2026-09-12 preparation run passed lint, typecheck and 214 tests, then built and
+inspected all nine consumer archives. Their JS/declarations, MIT license file,
+source provenance hashes, and native connector source/configuration were checked.
+The eight non-native entry points loaded from an extracted consumer layout.
+This is local package validation, not public npm distribution or native binary
+license certification.
 
-The root manifest currently declares the following direct foundations. These
-versions are declarations, not a verified installed tree: the donor lockfile was
-removed because it described the old application and could not truthfully lock
-the new workspace graph.
-
-| Component | Version in manifest | Declared license | Upstream |
-|---|---:|---|---|
+| Component | Root declaration | Declared license | Upstream |
+| --- | --- | --- | --- |
 | Expo | ~54.0.33 | MIT | [expo/expo](https://github.com/expo/expo) |
 | React Native | 0.81.5 | MIT | [facebook/react-native](https://github.com/facebook/react-native) |
 | React | 19.1.0 | MIT | [facebook/react](https://github.com/facebook/react) |
-| llama.rn | 0.12.9 (exact) | MIT | [mybigday/llama.rn](https://github.com/mybigday/llama.rn) |
+| llama.rn | 0.12.9, exact | MIT | [mybigday/llama.rn](https://github.com/mybigday/llama.rn) |
 | Zustand | ^5.0.11 | MIT | [pmndrs/zustand](https://github.com/pmndrs/zustand) |
 | TypeScript | ~5.9.2 | Apache-2.0 | [microsoft/TypeScript](https://github.com/microsoft/TypeScript) |
 
-The missing lockfile is a publication/reproducibility blocker. A 2026-08-27
-lock-only attempt could not resolve through the local TLS-certificate/offline-
-cache environment; that is not a dependency audit. Run `npm install` in a
-properly configured environment and commit the generated lock only after checking
-that the workspace graph, installed native artifacts, embedded llama.cpp build,
-notices, and runtime adapter all agree.
+A CycloneDX 1.5 inventory generated from the committed lockfile using npm's
+`sbom --package-lock-only` contains **1,007 components**, including development
+dependencies. It was retained in ignored local verification output rather than
+committed as a claim about shipped app binaries. `qrcode-terminal` and `requireg`
+have no license entry in that generated inventory; their source/license files
+need separate inspection for a final distribution. Declared transitive licenses
+include MIT, ISC, Apache-2.0, BSD variants, MPL-2.0 and others; the root MIT license
+does not replace those terms.
 
-`llama.rn` packages native binaries and embeds/synchronizes
-[llama.cpp](https://github.com/ggml-org/llama.cpp), which declares MIT. Native
-release artifacts and their included notices must be inspected for the exact
-version ultimately distributed. The runtime adapter targets llama.rn 0.12.9 and
-its embedded llama.cpp b10256.
+To reproduce a lockfile inventory with an npm version that supports `sbom`:
 
-No transitive dependency ledger is claimed until the new lockfile and SBOM are
-generated. Their licenses and native payloads require final-distribution review
-and, where applicable, attribution or source-availability compliance.
+```sh
+npm sbom --sbom-format=cyclonedx --package-lock-only --sbom-type=application
+```
+
+The existing `npm run sbom` command is a separate CycloneDX CLI workflow. Review
+the inventory of the actual distribution and preserve its required notices.
+Native engine binaries are downloaded separately during installation/builds;
+this source-only inventory does not fully enumerate their embedded components.
+
+`llama.rn` embeds patched [llama.cpp](https://github.com/ggml-org/llama.cpp)
+source. The pinned package identifies build b10256 / 6c8dcaa. The Hub's optional
+Android host has its own full source inventory and reproduced MIT notices,
+linked below. No native dependency version was changed for public preparation.
 
 ## Model weights and model metadata
 
@@ -123,16 +127,16 @@ Before publication:
 
 1. Confirm donor provenance and the exact MIT copyright line with the owner.
 2. Replace or document generated/template assets.
-3. Generate/review the workspace lock, then run `npm run sbom` and archive the
-   result without publishing secrets or local paths.
+3. Review updates to the committed lock and regenerate the distribution
+   inventory without publishing secrets or local paths.
 4. Collect license texts and notices for shipped JavaScript and native code.
 5. Inspect `llama.rn` release artifacts and the embedded `llama.cpp` revision.
 6. Verify every model catalog entry against the exact upstream revision.
 7. Confirm that no model weights or gated artifacts are present.
 8. Review trademarks and compatibility wording.
-9. Build and inspect package tarballs; current manifests expose TypeScript
-   source and are not ready for ordinary npm/Node consumers.
-# Optional Android inference host (2026-09-11 source implementation)
+9. Before public npm publishing, repeat the local pack/consumer checks and
+   review versioning and export conditions; do not publish source manifests directly.
+## Optional Android inference host
 
 `@modelcommons/inference-host` compiles a separate CPU/JNI library from the exact
 `llama.rn@0.12.9` npm source archive, including its llama.cpp/ggml patches. The
@@ -141,4 +145,6 @@ archive and complete source file hashes are recorded in
 two MIT source notices are reproduced in
 [`NOTICE`](modules/model-commons-inference-host/NOTICE). This host is included
 only in the Hub, and is distinct from the existing embedded llama.rn binary.
-No native build or distribution verification has been performed for this change.
+The complete arm64-v8a CPU library compiled and linked on 2026-09-12 with NDK
+27.0.12077973. Distribution inspection and signed two-app device verification
+remain separate from that compile result.
