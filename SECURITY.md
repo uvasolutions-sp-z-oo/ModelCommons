@@ -8,7 +8,7 @@ offered yet.
 
 ## Reporting a vulnerability
 
-Use the repository's [private vulnerability reporting form](https://github.com/asierraserna/ModelCommons/security/advisories/new)
+Use the repository's [private vulnerability reporting form](https://github.com/uvasolutions-sp-z-oo/ModelCommons/security/advisories/new)
 under **Security > Report a vulnerability**. Do not disclose a suspected vulnerability in a public issue,
 discussion, pull request, chat transcript, or provider fixture.
 
