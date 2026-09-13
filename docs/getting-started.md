@@ -2,6 +2,7 @@
 
 ModelCommons is a pre-alpha source release. Start with the canonical text path;
 public npm publishing and general official-provider-SDK support are not complete.
+For the shortest install and device flow, use the [quick start](../QUICKSTART.md).
 
 ## Run the checks
 

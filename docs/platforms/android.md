@@ -38,6 +38,23 @@ Consumers declare explicit `androidHubPackages`, supply an installed signing
 certificate SHA-256 pin, and obtain user approval in the Hub. Package IDs and
 public certificate fingerprints are configuration, not authorization by themselves.
 
+### Published official production Hub identity
+
+The official production Android Hub identity published by the project maintainer
+is:
+
+| Field | Value |
+| --- | --- |
+| Package | `com.uvasolutions.modelcommons` |
+| Signing certificate SHA-256 | `69:15:CE:DD:34:F3:C2:EC:F2:A6:82:89:AB:1E:A4:81:A3:2C:AD:E8:A7:CA:A8:A6:FB:E2:AF:93:08:42:70:54` |
+
+This fingerprint is public identity data, not a secret or signing credential.
+It identifies the official production signer only. Preview APKs, local debug
+builds, and forks can use different certificates; a consumer of those builds
+must pin the certificate of the Hub that will actually be installed. Publishing
+a fingerprint does not authorize a client—the Hub user still approves each
+consumer separately.
+
 For Sales&Pricing Mobile, configure `MODELCOMMONS_ANDROID_HUB_PACKAGE` and
 `MODELCOMMONS_ANDROID_HUB_SHA256` in the **consumer's** build environment, or its
 variant's `localAI.androidHubs`. Use the signing certificate of the Hub APK

@@ -64,6 +64,7 @@ tracks the remaining device work.
 
 ## Start here
 
+- [Try ModelCommons with a compatible app](QUICKSTART.md)
 - [Build the Hub and integrate a client](docs/getting-started.md)
 - [iOS device evidence and reproduction](docs/verification/ios-shared-models.md)
 - [Platform contracts and implementation status](docs/README.md)

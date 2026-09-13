@@ -2,8 +2,9 @@
 
 Current status: **2026-09-12 — pre-alpha / developer preview**.
 
-Start with the [project overview](../README.md), [getting-started guide](getting-started.md),
-and [owner-verified iOS Files test](verification/ios-shared-models.md).
+Start with the [project overview](../README.md), [quick start](../QUICKSTART.md),
+[developer getting-started guide](getting-started.md), and
+[owner-verified iOS Files test](verification/ios-shared-models.md).
 
 ## Current status
 
@@ -30,6 +31,7 @@ all-platform production support.
 
 ## Guides
 
+- [Quick start](../QUICKSTART.md)
 - [Getting started](getting-started.md)
 - [Roadmap](ROADMAP.md)
 - [Architecture](architecture/overview.md)
