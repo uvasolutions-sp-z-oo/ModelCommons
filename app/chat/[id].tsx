@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useHeaderHeight } from '@react-navigation/elements';
 import Constants from 'expo-constants';
 import type { ModelCommonsMessage } from '@modelcommons/protocol';
 import { InputArea } from '../../components/InputArea';
@@ -15,6 +16,7 @@ import { useHubStore } from '../../store/inferenceStore';
 import type { Message } from '../../types';
 
 export default function ChatScreen() {
+  const headerHeight = useHeaderHeight();
   const { id } = useLocalSearchParams<{ id: string }>();
   const sessions = useChatStore((state) => state.sessions);
   const chatActions = useChatStore((state) => state.actions);
@@ -99,7 +101,11 @@ export default function ChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={88}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : headerHeight}
+    >
       <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.container}>
         <Stack.Screen options={{ title: session.title }} />
         <View style={styles.status}>
@@ -107,6 +113,8 @@ export default function ChatScreen() {
           <Text numberOfLines={1} style={styles.model}>{resolvedModelId} · {profileId}</Text>
         </View>
         <FlatList
+          style={styles.flex}
+          keyboardShouldPersistTaps="handled"
           ref={list}
           data={displayed}
           keyExtractor={(message) => message.id}
@@ -152,7 +160,7 @@ const styles = StyleSheet.create({
   status: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.border },
   model: { flex: 1, color: palette.muted, fontSize: 11 },
   messages: { flexGrow: 1, paddingVertical: 8 },
-  empty: { flex: 1, minHeight: 300, alignItems: 'center', justifyContent: 'center', padding: 30 },
+  empty: { flex: 1, minHeight: Platform.OS === 'android' ? 0 : 300, alignItems: 'center', justifyContent: 'center', padding: 30 },
   emptyTitle: { color: palette.ink, fontSize: 20, fontWeight: '800', marginBottom: 8 },
   emptyText: { color: palette.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
 });

@@ -38,6 +38,19 @@ Consumers declare explicit `androidHubPackages`, supply an installed signing
 certificate SHA-256 pin, and obtain user approval in the Hub. Package IDs and
 public certificate fingerprints are configuration, not authorization by themselves.
 
+For Sales&Pricing Mobile, configure `MODELCOMMONS_ANDROID_HUB_PACKAGE` and
+`MODELCOMMONS_ANDROID_HUB_SHA256` in the **consumer's** build environment, or its
+variant's `localAI.androidHubs`. Use the signing certificate of the Hub APK
+installed on the device. `apksigner verify --verbose --print-certs ModelCommons.apk`
+prints APK signing certificates; an APK file checksum is a different value.
+A Play installation may use a different app signing key from the EAS/AAB upload
+key. Never substitute the upload key for the installed app's signer.
+
+After installing the configured consumer build, connect from Sales&Pricing
+Mobile to register a pending request, approve its package and certificate in
+Hub **Clients**, then return, reconnect and refresh models. Missing build trust
+cannot be repaired by client approval. Neither step downloads a private model.
+
 `createAndroidBinderTransport({ packageName, trustedCertificateSha256 })` returns
 a canonical transport, service information, and disconnect operation. Both apps
 must ship matching API 2 native connectors. API 1 parcels are incompatible.
@@ -79,3 +92,13 @@ from those cases.
 
 Android's design differs from the [verified iOS Files flow](../verification/ios-shared-models.md),
 where each consumer executes locally against shared storage.
+
+## Chat keyboard verification
+
+Hub chat explicitly uses Android keyboard height avoidance with the navigation
+header's measured height. Its message list can shrink while the composer remains
+outside the scrolling content. iOS retains its existing padding behavior and offset.
+On a physical Android device, verify empty and populated chats, multiline input,
+Send/Cancel, repeated keyboard open/close, gesture navigation and three-button
+navigation. Check that controls stay above the keyboard and system navigation bar.
+Source checks alone do not verify keyboard layout on a device.
