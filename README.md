@@ -36,12 +36,12 @@ This is one owner-verified device scenario, not a device compatibility matrix.
 ```mermaid
 flowchart LR
     Hub[ModelCommons] -->|downloads and verifies| Store[Shared GGUF model]
-    Store -->|user grants access through Files| Client[Compatible iOS app]
+    Store -->|iOS Files or Android SAF grant| Client[Compatible app]
     Client --> Runtime[App-owned local runtime]
     Runtime --> Response[Offline response]
 ```
 
-The iOS flow reuses the model **file**. Each consuming app still ships a runtime
+The shared-files flow reuses the model **file**. Each consuming app still ships a runtime
 and allocates its own inference context and memory. ModelCommons is not an iOS
 background inference server. A compatible app must integrate the client and
 storage connector; existing apps do not gain sharing automatically.
@@ -52,15 +52,16 @@ storage connector; existing apps do not gain sharing automatically.
 | Local inference inside each app | Reported working by the owner; the shared test is documented separately |
 | iOS App Groups | Optional same-team storage path implemented; separate device verification pending |
 | Separately signed, unrelated-team iOS clients | Not yet device-verified |
-| Android centralized inference over Binder | Implemented; native CPU library compiles and links; two-app device verification pending |
+| Android SAF shared files | Implemented with consumer-owned descriptor inference; two-app device verification pending |
+| Android centralized inference over Binder | Retained as an explicit experimental path; normal consumers do not use it |
 | Canonical client, model store, runtime and provider adapters | Implemented and covered by local contract tests; supported subsets vary |
 | npm distribution | Local package build/packing available; no public npm release claimed |
 | Web | Protocol/client code is reusable; native inference reports unavailable |
 
-Android is the next platform milestone. It is designed to let the Hub own both
-storage and inference, with authorized clients calling a Binder service. Its
-[acceptance procedure](docs/verification/android-binder-inference-owner-run.md)
-tracks the remaining device work.
+Android now follows the same ownership model as iOS: ModelCommons owns storage,
+and the consumer owns inference. Its
+[acceptance procedure](docs/verification/android-shared-files-owner-run.md)
+tracks the remaining physical-device proof.
 
 ## Start here
 
@@ -155,7 +156,7 @@ reporting endpoint. See [PRIVACY.md](PRIVACY.md),
 | [`packages/embedded`](packages/embedded) | Private/shared-store local inference composition |
 | [`packages/device-profile`](packages/device-profile) | Conservative device/profile heuristics |
 | [`packages/runtime-llama-rn`](packages/runtime-llama-rn) | Optional pinned local text runtime |
-| [`modules/model-commons-native`](modules/model-commons-native) | iOS storage and Android Binder connectors |
+| [`modules/model-commons-native`](modules/model-commons-native) | iOS storage, Android SAF/descriptors, and optional Binder connectors |
 | [`modules/model-commons-inference-host`](modules/model-commons-inference-host) | Hub-only Android CPU inference worker |
 | [`packages/provider-openai`](packages/provider-openai), [`packages/provider-anthropic`](packages/provider-anthropic) | Local provider-shaped adapters |
 | [`services/modelcommons`](services/modelcommons) | Hub catalog, storage and runtime integration |

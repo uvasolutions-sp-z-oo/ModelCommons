@@ -15,12 +15,29 @@ export type LlamaRnContext = Awaited<ReturnType<LlamaRnModule['initLlama']>>;
 export interface ModelResourceLease {
   /** Stable lease identity. It participates in the native-context cache key. */
   id: string;
-  /** A file URL or absolute path accepted by llama.rn. */
+  /** A path-backed location or the native-descriptor sentinel accepted by this adapter. */
   uri: string;
+  resource?: AndroidFileDescriptorResource;
   /** Fresh stat while this lease is active; never hashes or returns a path. */
   inspectFile?(): Promise<{ present: boolean; regular: boolean; sizeMatches: boolean }>;
   /** Must stop security-scoped access only after the llama context is released. */
   release(): Promise<void>;
+}
+
+export interface AndroidFileDescriptorResource {
+  kind: 'android-file-descriptor';
+  descriptorVersion: 2;
+  /** One-shot native handoff bound to the verified file identity. */
+  openDescriptor(): Promise<AndroidFileDescriptorHandle>;
+}
+
+export interface AndroidFileDescriptorHandle {
+  kind: 'android-file-descriptor';
+  descriptorVersion: 2;
+  descriptor: number;
+  device: string;
+  inode: string;
+  size: string;
 }
 
 export interface LlamaRnModelSource {
@@ -28,6 +45,7 @@ export interface LlamaRnModelSource {
   revision?: string;
   uri: string;
   lease?: ModelResourceLease;
+  resource?: AndroidFileDescriptorResource;
 }
 
 export interface CreateLlamaRnSessionOptions {

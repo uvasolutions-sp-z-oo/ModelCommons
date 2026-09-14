@@ -13,6 +13,7 @@ import expo.modules.modelcommonsnative.security.CallerAuthorizer
 import expo.modules.modelcommonsnative.service.ModelCommonsService
 import expo.modules.modelcommonsnative.service.InferenceCoordinator
 import expo.modules.modelcommonsnative.storage.AppOwnedFileOps
+import expo.modules.modelcommonsnative.storage.AndroidSharedModelFiles
 import expo.modules.modelcommonsnative.storage.HubStateStore
 import expo.modules.modelcommonsnative.storage.PrivateModelFiles
 
@@ -26,8 +27,11 @@ class ModelCommonsNativeModule : Module() {
   }
   private val hubClient: AndroidHubClient by hubClientDelegate
   private val privateFiles by lazy { PrivateModelFiles(androidContext) }
+  private val sharedFiles by lazy { AndroidSharedModelFiles(androidContext) }
   private data class PendingImport(val id: String, val path: String, val expected: Double, val promise: Promise)
+  private data class PendingSharedDirectory(val promise: Promise)
   private var pendingImport: PendingImport? = null
+  private var pendingSharedDirectory: PendingSharedDirectory? = null
   private val mutationToken = Any()
   private var mutating = false
   private val privateDownloads = java.util.concurrent.atomic.AtomicLong(0)
@@ -59,6 +63,25 @@ class ModelCommonsNativeModule : Module() {
       }
     }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
 
+    AsyncFunction("connectSharedDirectory") { promise: Promise ->
+      if (pendingSharedDirectory != null) {
+        promise.reject("ERR_MODELCOMMONS_PICKER", "RUNTIME_UNAVAILABLE: A shared-folder picker is already active.", null)
+      } else {
+        pendingSharedDirectory = PendingSharedDirectory(promise)
+        try {
+          appContext.throwingActivity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            putExtra(Intent.EXTRA_LOCAL_ONLY, true)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+          }, SHARED_DIRECTORY_REQUEST)
+        } catch (_: Exception) {
+          pendingSharedDirectory = null
+          promise.reject("ERR_MODELCOMMONS_PICKER", "RUNTIME_UNAVAILABLE: Unable to open the Android folder picker.", null)
+        }
+      }
+    }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
+
     OnActivityResult { _, (requestCode, resultCode, data) ->
       if (requestCode == 48627) {
         val pending = pendingImport
@@ -80,7 +103,52 @@ class ModelCommonsNativeModule : Module() {
           }.start()
         }
       }
+      if (requestCode == SHARED_DIRECTORY_REQUEST) {
+        val pending = pendingSharedDirectory
+        pendingSharedDirectory = null
+        val source = data?.data
+        if (pending != null) {
+          if (resultCode != Activity.RESULT_OK || source == null) {
+            pending.promise.reject("ERR_MODELCOMMONS_PICKER", "USER_CANCELLED: Shared folder selection cancelled.", null)
+          } else Thread {
+            try {
+              pending.promise.resolve(sharedFiles.connect(source, data?.flags ?: 0))
+            } catch (error: Exception) {
+              pending.promise.reject(
+                "ERR_MODELCOMMONS_CONNECT",
+                error.message ?: "PERMISSION_REQUIRED: Shared folder authorization failed.",
+                error,
+              )
+            }
+          }.start()
+        }
+      }
     }
+
+    AsyncFunction("listSharedConnections") { sharedFiles.listConnections() }
+      .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
+
+    AsyncFunction("disconnectSharedDirectory") { connectionId: String -> sharedFiles.disconnect(connectionId) }
+      .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
+
+    AsyncFunction("acquireModelLease") { connectionId: String, relativePath: String ->
+      sharedFiles.acquire(connectionId, relativePath)
+    }.runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
+
+    AsyncFunction("releaseModelLease") { leaseId: String -> sharedFiles.release(leaseId) }
+      .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
+
+    AsyncFunction("sha256Lease") { leaseId: String -> sharedFiles.sha256(leaseId) }
+      .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
+
+    AsyncFunction("readLeaseMetadata") { leaseId: String -> sharedFiles.readMetadata(leaseId) }
+      .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
+
+    AsyncFunction("statLease") { leaseId: String -> sharedFiles.stat(leaseId) }
+      .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
+
+    AsyncFunction("prepareLeaseForRuntime") { leaseId: String -> sharedFiles.prepareRuntimeDescriptor(leaseId) }
+      .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
 
     AsyncFunction("privateModelOperation") { operation: String, path: String, value: String ->
       privateFiles.operation(operation, path, value)
@@ -103,7 +171,6 @@ class ModelCommonsNativeModule : Module() {
     }
 
     AsyncFunction("privateModelEvidence") {
-      val root = java.io.File(androidContext.noBackupFilesDir.canonicalFile, "ModelCommonsPrivate")
       var count = 0L
       var bytes = 0L
       var entries = 0
@@ -111,9 +178,19 @@ class ModelCommonsNativeModule : Module() {
         check(depth <= 8 && ++entries <= 8192 && file.canonicalFile == file.absoluteFile) { "INTEGRITY_FAILED" }
         if (file.isDirectory) {
           (file.listFiles() ?: throw IllegalStateException("STORAGE_UNAVAILABLE")).forEach { scan(it, depth + 1) }
-        } else if (file.isFile && file.name.contains(".gguf")) { count++; bytes += file.length() }
+        } else if (file.isFile && file.name.endsWith(".gguf", ignoreCase = true)) {
+          count++
+          bytes += file.length()
+        }
       }
-      if (root.exists()) scan(root, 0)
+      val roots = listOfNotNull(
+        androidContext.filesDir,
+        androidContext.noBackupFilesDir,
+        androidContext.cacheDir,
+        androidContext.getExternalFilesDir(null),
+        androidContext.externalCacheDir,
+      ).map { it.canonicalFile }.distinctBy { it.path }
+      roots.filter { it.exists() }.forEach { scan(it, 0) }
       mapOf("downloadAttempts" to privateDownloads.get().toDouble(), "importAttempts" to privateImports.get().toDouble(),
         "artifactCount" to count.toDouble(), "artifactBytes" to bytes.toDouble())
     }
@@ -123,6 +200,7 @@ class ModelCommonsNativeModule : Module() {
         "available" to true,
         "platform" to "android",
         "androidHubConnected" to (hubClientDelegate.isInitialized() && hubClient.isConnected),
+        "androidSharedModels" to true,
         "iosSharedModels" to false,
       )
     }
@@ -250,8 +328,19 @@ class ModelCommonsNativeModule : Module() {
     OnActivityEntersBackground { if (hubClientDelegate.isInitialized()) hubClient.close() }
     OnDestroy {
       if (hubClientDelegate.isInitialized()) hubClient.close()
+      pendingSharedDirectory?.promise?.reject(
+        "ERR_MODELCOMMONS_PICKER",
+        "USER_CANCELLED: Shared folder selection ended because the application closed.",
+        null,
+      )
+      sharedFiles.closeAll()
+      pendingSharedDirectory = null
       // A destroyed JS owner cannot prove an outstanding filesystem mutation drained.
       // Keep that gate occupied until completion or process restart; never admit mmap early.
     }
+  }
+
+  companion object {
+    private const val SHARED_DIRECTORY_REQUEST = 48628
   }
 }

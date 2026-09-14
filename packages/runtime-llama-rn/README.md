@@ -3,8 +3,9 @@
 Optional ModelCommons runtime adapter pinned to `llama.rn` 0.12.9 (embedded llama.cpp build b10256).
 
 The owner-verified [iOS Files milestone](../../docs/verification/ios-shared-models.md)
-uses this runtime in the consuming application. It establishes one text scenario,
-not general model, accelerator or lifecycle coverage.
+uses this runtime in the consuming application. Android package `0.2.0` adds the
+`modelcommons-android-fd-v2` descriptor path; physical two-app acceptance is
+still pending.
 
 The package deliberately makes `llama.rn` an optional peer. Installing `@modelcommons/client` or the protocol packages must not download native inference binaries; only applications that choose this runtime install the exact peer.
 
@@ -16,4 +17,12 @@ Capabilities are read from the loaded context (`gpu`, `reasonNoGPU`, `devices`, 
 
 Cancellation is native: once a request owns the serialized inference lane, abort/cancel invokes `context.stopCompletion()`. Aborting a queued request never stops a different session's active completion. Ending async iteration early also aborts the associated native request.
 
-For iOS open-ecosystem storage, pass the lease returned by `@modelcommons/native` as the model lease. Do not call the native lease's `release()` separately; this runtime balances it after the mmap/context is destroyed.
+For shared storage, pass the lease returned by `@modelcommons/native` as the
+model lease. On Android the runtime checks the patched 0.12.9 capability before
+borrowing the native-owned descriptor. The patch synchronously validates and
+duplicates a read-only, regular, non-empty, seekable descriptor and its recorded
+device/inode/size identity before background initialization, loads through
+`llama_model_load_from_file_ptr`, and retains its `FILE*` until after model and
+context destruction. Hashing and stat use the same original lease; no pathname,
+`/proc/self/fd`, or copied GGUF is used. Do not release the native lease
+separately; this runtime balances it after the context is destroyed.

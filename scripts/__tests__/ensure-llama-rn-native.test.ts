@@ -13,7 +13,11 @@ describe('ensure-llama-rn-native', () => {
     const spawn = vi.fn();
 
     expect(hasArm64NativePayload('D:/ModelCommons', fsModule)).toBe(true);
-    ensureLlamaRnNativeArtifacts('D:/ModelCommons', { fsModule, spawn, output: { log: vi.fn() } });
+    const applyDescriptorPatch = vi.fn();
+    ensureLlamaRnNativeArtifacts('D:/ModelCommons', {
+      fsModule, spawn, applyDescriptorPatch, output: { log: vi.fn() },
+    });
+    expect(applyDescriptorPatch).toHaveBeenCalledOnce();
     expect(spawn).not.toHaveBeenCalled();
   });
 
@@ -28,7 +32,11 @@ describe('ensure-llama-rn-native', () => {
     };
     const spawn = vi.fn((_command: string, _args: string[], _options: unknown) => ({ status: 0 }));
 
-    ensureLlamaRnNativeArtifacts('D:/ModelCommons', { fsModule, spawn, output: { log: vi.fn() } });
+    const applyDescriptorPatch = vi.fn();
+    ensureLlamaRnNativeArtifacts('D:/ModelCommons', {
+      fsModule, spawn, applyDescriptorPatch, output: { log: vi.fn() },
+    });
+    expect(applyDescriptorPatch).toHaveBeenCalledOnce();
     expect(spawn).toHaveBeenCalledOnce();
     expect(spawn).toHaveBeenCalledWith(
       process.execPath,

@@ -3,11 +3,13 @@ const {
   createRunOncePlugin,
   withAndroidManifest,
   withEntitlementsPlist,
+  withGradleProperties,
   withInfoPlist,
 } = require('@expo/config-plugins');
 const pkg = require('./package.json');
 
 const SERVICE_NAME = 'expo.modules.modelcommonsnative.service.ModelCommonsService';
+const PROVIDER_NAME = 'expo.modules.modelcommonsnative.provider.ModelCommonsDocumentsProvider';
 const ANDROID_PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
 
 function withIos(config, options) {
@@ -51,8 +53,10 @@ function withAndroid(config, options) {
       service = { $: { 'android:name': SERVICE_NAME } };
       application.service.push(service);
     }
-    service.$['android:enabled'] = options.androidHubService === true ? 'true' : 'false';
-    service.$['android:exported'] = options.androidHubService === true ? 'true' : 'false';
+    const serviceEnabled = options.androidHubService === true;
+    const serviceExported = serviceEnabled && options.androidHubServiceExported === true;
+    service.$['android:enabled'] = serviceEnabled ? 'true' : 'false';
+    service.$['android:exported'] = serviceExported ? 'true' : 'false';
     service.$['android:stopWithTask'] = 'false';
     service.$['tools:replace'] = 'android:enabled,android:exported';
     service['intent-filter'] = [
@@ -60,6 +64,23 @@ function withAndroid(config, options) {
         action: [{ $: { 'android:name': 'org.modelcommons.action.BIND' } }],
       },
     ];
+
+    application.provider = application.provider || [];
+    let provider = application.provider.find((item) => item.$ && item.$['android:name'] === PROVIDER_NAME);
+    if (!provider) {
+      provider = { $: { 'android:name': PROVIDER_NAME } };
+      application.provider.push(provider);
+    }
+    const providerEnabled = options.androidSharedDocumentsProvider === true;
+    provider.$['android:authorities'] = '${applicationId}.modelcommons.documents';
+    provider.$['android:enabled'] = providerEnabled ? 'true' : 'false';
+    provider.$['android:exported'] = providerEnabled ? 'true' : 'false';
+    provider.$['android:grantUriPermissions'] = 'true';
+    provider.$['android:permission'] = 'android.permission.MANAGE_DOCUMENTS';
+    provider.$['tools:replace'] = 'android:authorities,android:enabled,android:exported,android:grantUriPermissions,android:permission';
+    provider['intent-filter'] = [{
+      action: [{ $: { 'android:name': 'android.content.action.DOCUMENTS_PROVIDER' } }],
+    }];
 
     const queryPackages = Array.isArray(options.androidHubPackages)
       ? [...new Set(options.androidHubPackages.filter(
@@ -84,6 +105,15 @@ function withAndroid(config, options) {
 function withModelCommonsNative(config, options = {}) {
   config = withIos(config, options);
   config = withAndroid(config, options);
+  if (options.androidDescriptorRuntime === true) {
+    config = withGradleProperties(config, (result) => {
+      const properties = result.modResults;
+      const existing = properties.find((item) => item.type === 'property' && item.key === 'rnllamaBuildFromSource');
+      if (existing) existing.value = 'true';
+      else properties.push({ type: 'property', key: 'rnllamaBuildFromSource', value: 'true' });
+      return result;
+    });
+  }
   return config;
 }
 

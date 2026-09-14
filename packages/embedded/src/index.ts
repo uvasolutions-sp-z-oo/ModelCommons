@@ -81,7 +81,13 @@ export function createEmbeddedLocalAI(options: EmbeddedOptions) {
           if (closed) throw new ModelCommonsError('USER_CANCELLED', 'Backend changed before model initialization.');
           handedToRuntime = true;
           session = await engine().createSession({
-            model: { id: resource.manifest.id, revision: resource.manifest.revision, uri: resource.lease.uri, lease: resource.lease }, profile,
+            model: {
+              id: resource.manifest.id,
+              revision: resource.manifest.revision,
+              uri: resource.lease.uri,
+              lease: resource.lease,
+              ...(resource.lease.resource ? { resource: resource.lease.resource } : {}),
+            }, profile,
             enforceContextBudget: true,
             diagnosticModelInfo: options.diagnosticModelInfo === true,
           });

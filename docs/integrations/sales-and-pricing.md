@@ -39,7 +39,7 @@ does not share runtime memory between applications.
 | --- | --- | --- |
 | App-contained local | Sales & Pricing Mobile private store | Sales & Pricing Mobile |
 | Shared with ModelCommons on iOS | User-selected ModelCommons store | Sales & Pricing Mobile |
-| Shared with ModelCommons on Android | ModelCommons Hub | Hub-owned Binder worker; device acceptance pending |
+| Shared with ModelCommons on Android | ModelCommons shared storage | Sales & Pricing Mobile; device acceptance pending |
 
 A shared request must not call the private provisioning/import path or fall back
 to another provider. Any separate cloud or LAN mode belongs to the consumer's
@@ -57,10 +57,11 @@ and its own pinned runtime. It supplies trusted catalog metadata and validates
 a candidate connection before replacing a working one. Use the
 [iOS contract](../platforms/ios.md) for plugin configuration and lease handling.
 
-For Android, configure explicit Hub package visibility, the installed signing
-certificate pin, and user approval. Use `createAndroidBinderTransport` from the
-native connector; the consumer does not include the Hub-only worker. See the
-[Binder acceptance guide](../verification/android-binder-inference-owner-run.md).
+For Android, enable the consumer descriptor runtime and keep its provider and
+inference service disabled. The user grants the ModelCommons SAF root; the same
+read-only store and embedded/canonical composition then runs in the consumer.
+Normal sharing needs neither Hub package visibility nor approval in Hub Clients.
+See the [shared-files acceptance guide](../verification/android-shared-files-owner-run.md).
 
 ## Application responsibilities
 

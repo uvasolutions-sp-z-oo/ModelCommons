@@ -11,14 +11,16 @@ Protected assets include prompts, responses, tool inputs/results, medical or
 commercial data, model artifacts, model-license acceptance, client approvals,
 signing identities, provider configuration, and device diagnostics.
 
-Trust changes at six boundaries:
+Trust changes at seven boundaries:
 
 1. application code to the provider-neutral client;
 2. client to an in-process or cross-app transport;
 3. runtime to model/store files;
 4. generated output to application tools or UI; and
-5. app sandbox to user-selected or App Group storage; and
-6. an explicit, user-confirmed output report crossing from the app to an
+5. an Android consumer to a user-selected DocumentsProvider and persisted
+   read grant;
+6. app sandbox to user-selected or App Group storage; and
+7. an explicit, user-confirmed output report crossing from the app to an
    operator-controlled receiver, when one is configured.
 
 The model and its output are untrusted content. A downloaded GGUF is also
@@ -30,6 +32,9 @@ untrusted input even when its source is reputable.
 |---|---|---|
 | Unapproved Android app invokes inference | Caller UID captured per entry; all packages resolved; package + signing identity + user approval checked on every call; scoped sessions | `CLIENT_NOT_AUTHORIZED` |
 | Binder confused deputy or identity loss | Authenticate before coroutine/identity clearing; never trust supplied package name, PID, or WorkSource | reject request |
+| Wrong or changed Android shared-file provider | Explicit system-picker consent; exact ModelCommons root/authority contract; exported `MANAGE_DOCUMENTS` provider validation; installed package and signer recorded at authorization and rechecked before acquisition; labels alone grant no trust | `PERMISSION_REQUIRED` or `HUB_NOT_FOUND` |
+| Revoked or temporary Android tree access treated as connected | Persist only a returned read/persistable grant; reconcile saved records with OS grants; validate the provider and protocol again before every acquisition | `PERMISSION_REQUIRED` |
+| Android descriptor substitution, nonseekable input, or consumer copy | Opaque native lease identity controls one-shot issuance; stat and streaming SHA-256 use `pread` on the leased backing; synchronous JSI duplication checks read-only regular/nonempty/seekable state plus recorded device/inode/size before the background load; context destruction precedes lease close; no content URI, private provider path, `/proc/self/fd`, or GGUF copy | `INTEGRITY_FAILED`, `MODEL_NOT_READY`, or `RUNTIME_UNAVAILABLE` |
 | Binder resource exhaustion | request cap no greater than 64 KiB (current scaffold: 48 KiB), 8–16 KiB stream chunks, pagination, bounded sessions/queues, client-death cleanup | typed capacity/transport error |
 | Path traversal, symlink escape, or malicious manifest | Relative normalized paths only; no schemes/backslashes/traversal; canonical-root confinement in native code; schema and size checks | `INTEGRITY_FAILED` |
 | Truncated, replaced, or poisoned model | HTTPS source, immutable revision, temporary download, size + SHA-256 before atomic publication and again before sensitive load | never mark `READY` |

@@ -1,6 +1,6 @@
 {
   "name": "@modelcommons/embedded",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Optional store, profile and llama.rn in-process composition.",
   "license": "MIT",
   "type": "module",
@@ -12,8 +12,8 @@
   "dependencies": {
     "@modelcommons/protocol": "0.1.0",
     "@modelcommons/client": "0.1.0",
-    "@modelcommons/model-store": "0.1.0",
+    "@modelcommons/model-store": "0.2.0",
     "@modelcommons/device-profile": "0.1.0",
-    "@modelcommons/runtime-llama-rn": "0.1.0"
+    "@modelcommons/runtime-llama-rn": "0.2.0"
   }
 }

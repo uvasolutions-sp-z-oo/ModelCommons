@@ -1,6 +1,6 @@
 {
   "name": "@modelcommons/native",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Optional Expo native transport and shared-model connector for ModelCommons.",
   "license": "MIT",
   "main": "./src/index.ts",
@@ -30,6 +30,6 @@
     "@modelcommons/client": "0.1.0",
     "@expo/config-plugins": "^54.0.0",
     "@modelcommons/protocol": "0.1.0",
-    "@modelcommons/model-store": "0.1.0"
+    "@modelcommons/model-store": "0.2.0"
   }
 }

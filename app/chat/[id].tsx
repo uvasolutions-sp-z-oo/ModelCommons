@@ -38,7 +38,7 @@ export default function ChatScreen() {
     profileId,
     context,
   });
-  const resolvedModelId = resolvedModel?.manifest.id ?? selectedModelId;
+  const resolvedModelId = resolvedModel?.manifest.id;
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState('');
   const [reportedMessage, setReportedMessage] = useState<Message>();
@@ -59,6 +59,13 @@ export default function ChatScreen() {
 
   const send = async (text: string) => {
     if (loading) return;
+    if (!resolvedModelId) {
+      Alert.alert(
+        'Select an installed model',
+        'The current selection is not ready for this Android runtime. Open Models, finish a download, and select a READY model.'
+      );
+      return;
+    }
     const pending: Message = { id: 'pending', role: 'user', content: text, timestamp: Date.now() };
     const history: ModelCommonsMessage[] = [...session.messages, pending]
       .filter((message) => message.role !== 'system')
@@ -109,8 +116,10 @@ export default function ChatScreen() {
       <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.container}>
         <Stack.Screen options={{ title: session.title }} />
         <View style={styles.status}>
-          <Badge tone="success">OFFLINE</Badge>
-          <Text numberOfLines={1} style={styles.model}>{resolvedModelId} · {profileId}</Text>
+          <Badge tone={resolvedModelId ? 'success' : 'warning'}>{resolvedModelId ? 'OFFLINE' : 'NOT READY'}</Badge>
+          <Text numberOfLines={1} style={styles.model}>
+            {resolvedModelId ? `${resolvedModelId} · ${profileId}` : 'Select a READY model in Models'}
+          </Text>
         </View>
         <FlatList
           style={styles.flex}
@@ -134,7 +143,13 @@ export default function ChatScreen() {
           onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyTitle}>Local, generic chat</Text><Text style={styles.emptyText}>Prompts and responses remain in memory and are excluded from diagnostics.</Text></View>}
         />
-        <InputArea onSend={(text) => void send(text)} onCancel={() => abort.current?.abort()} loading={loading} />
+        <InputArea
+          onSend={(text) => void send(text)}
+          onCancel={() => abort.current?.abort()}
+          loading={loading}
+          disabled={!resolvedModelId}
+          placeholder={resolvedModelId ? 'Message the selected local model' : 'Select an installed model first'}
+        />
         {reportedMessage?.executionContext ? (
           <ReportOutputModal
             visible

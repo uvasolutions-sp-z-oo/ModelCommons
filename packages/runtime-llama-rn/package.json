@@ -1,6 +1,6 @@
 {
   "name": "@modelcommons/runtime-llama-rn",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Optional llama.rn runtime adapter for ModelCommons.",
   "license": "MIT",
   "type": "module",

@@ -9,7 +9,8 @@ export type InitFailureKind = typeof INIT_FAILURE_KINDS[number];
 export type InitFailureStage = 'loadModule' | 'contextParams' | 'modelFileCheck'
   | 'loadLlamaModelInfo' | 'initLlama' | 'reportCapabilities';
 
-export function modelLocationKind(uri: string): 'file-uri' | 'absolute-path' | 'other' {
+export function modelLocationKind(uri: string): 'file-uri' | 'absolute-path' | 'native-file-descriptor' | 'other' {
+  if (uri === 'modelcommons-native://android-file-descriptor') return 'native-file-descriptor';
   if (/^file:/i.test(uri)) return 'file-uri';
   if (uri.startsWith('/') || /^[a-z]:[\\/]/i.test(uri)) return 'absolute-path';
   return 'other';

@@ -80,8 +80,9 @@ npm run packages:pack-local -- ../my-client/vendor/modelcommons
 
 The destination must end in `vendor/modelcommons`. Run against a client directory
 you own. Install the generated archives together in that client, using the actual
-relative paths in its package manifest. Matching archive provenance matters:
-pre-alpha archives can share version `0.1.0` while containing different source.
+relative paths in its package manifest. Matching archive provenance matters.
+Descriptor-capable packages are versioned `0.2.0`; the unchanged
+protocol/client/provider packages remain `0.1.0`.
 The Hub-only inference host is intentionally excluded from consumer archives.
 This command does not publish to npm or install into the client.
 
@@ -91,9 +92,10 @@ plugin and shared reader. A consuming app provides its own trusted model policy,
 explicit transport choice, and cancellation/identity lifecycle. Shared mode uses
 the read-only store; it must not silently import or download a private copy.
 
-On iOS, the client includes its own optional `llama.rn` runtime. On Android,
-centralized mode uses the Binder connector, explicit installed-signing pins and
-Hub authorization; follow the [Android acceptance guide](verification/android-binder-inference-owner-run.md).
+On iOS and Android, normal shared-files mode uses the consumer's optional
+`llama.rn` runtime. Android selects the ModelCommons SAF root and loads through a
+native read-only descriptor; follow the
+[Android acceptance guide](verification/android-shared-files-owner-run.md).
 
 ## Record results
 

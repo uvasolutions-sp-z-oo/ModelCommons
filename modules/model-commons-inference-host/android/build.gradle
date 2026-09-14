@@ -1,6 +1,6 @@
 apply plugin: 'com.android.library'
 group = 'org.modelcommons.host'
-version = '0.1.0'
+version = '0.2.0'
 def expoModulesCorePlugin = new File(project(':expo-modules-core').projectDir.absolutePath, 'ExpoModulesCorePlugin.gradle')
 apply from: expoModulesCorePlugin
 applyKotlinExpoModulesCorePlugin()

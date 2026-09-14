@@ -1,6 +1,6 @@
 # ModelCommons documentation
 
-Current status: **2026-09-12 — pre-alpha / developer preview**.
+Current status: **2026-09-14 — pre-alpha / developer preview**.
 
 Start with the [project overview](../README.md), [quick start](../QUICKSTART.md),
 [developer getting-started guide](getting-started.md), and
@@ -14,7 +14,8 @@ Start with the [project overview](../README.md), [quick start](../QUICKSTART.md)
 | Local app-owned text inference | Reported working by the owner; the shared flow records storage and execution ownership separately |
 | iOS App Group sharing | Implemented; separate provisioning and device test pending |
 | Unrelated-team iOS sharing | Design path; separately signed client verification pending |
-| Android Binder inference | API 2 and Hub-only CPU host implemented; native library compiled/linked locally; two-app device acceptance pending |
+| Android SAF shared files | Provider, persisted grants, native descriptor leases and consumer runtime composition implemented; two-app device acceptance pending |
+| Android Binder inference | API 2 remains an explicit experimental path; normal consumers do not use it |
 | Canonical protocol and client | Implemented; protocol 0.1.0, validation, selection, lifecycle, errors and transport contracts |
 | Model store and embedded composition | Reusable packages implemented; trusted catalog, integrity, leases, private and shared-reader paths |
 | llama.rn adapter | Exact 0.12.9; local text path used in the iOS milestone; broad model/backend/lifecycle coverage pending |
@@ -38,7 +39,8 @@ all-platform production support.
 - [Protocol and versioning](protocol/versioning.md)
 - [Provider compatibility](providers/compatibility.md)
 - [iOS sharing contract](platforms/ios.md)
-- [Android service](platforms/android.md)
+- [Android shared models](platforms/android.md)
+- [Android shared-files owner-run acceptance](verification/android-shared-files-owner-run.md)
 - [Model store](models/store.md)
 - [Memory and Elastic MoE](models/memory-and-moe.md)
 - [Sales & Pricing integration](integrations/sales-and-pricing.md)

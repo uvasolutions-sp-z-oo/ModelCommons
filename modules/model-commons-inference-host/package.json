@@ -1,10 +1,10 @@
 {
   "name": "@modelcommons/inference-host",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "description": "Optional Android Hub CPU inference owner; never required by Binder consumers",
   "main": "index.js",
   "files": ["android", "expo-module.config.json", "index.js", "source-pin.json", "source-files.cmake", "NOTICE"],
-  "peerDependencies": { "expo": "*", "llama.rn": "0.12.9", "@modelcommons/native": "0.1.0" }
+  "peerDependencies": { "expo": "*", "llama.rn": "0.12.9", "@modelcommons/native": "0.2.0" }
 }

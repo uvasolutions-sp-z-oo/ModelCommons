@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 const native = vi.hoisted(() => ({
   acquireModelLease: vi.fn(), releaseModelLease: vi.fn(), readLeaseMetadata: vi.fn(),
-  statLease: vi.fn(), sha256Lease: vi.fn(),
+  statLease: vi.fn(), sha256Lease: vi.fn(), prepareLeaseForRuntime: vi.fn(),
 }));
 vi.mock('../nativeModule', () => ({ default: native }));
 import { createSharedStorePort } from '../sharedStore';
@@ -12,6 +12,27 @@ beforeEach(() => {
   native.releaseModelLease.mockResolvedValue(undefined);
   native.statLease.mockResolvedValue({ size: 3, regular: true });
   native.sha256Lease.mockResolvedValue('a'.repeat(64));
+  native.prepareLeaseForRuntime.mockResolvedValue({
+    kind: 'android-file-descriptor', descriptor: 41, descriptorVersion: 2,
+    device: '12', inode: '34', size: '56',
+  });
+});
+it('preserves Android shared identity and exposes only a validated native descriptor resource', async () => {
+  native.acquireModelLease.mockResolvedValue({
+    id: 'android-lease', connectionId: 'connection',
+    uri: 'modelcommons-native://android-file-descriptor',
+    resourceKind: 'android-file-descriptor', coordinationVersion: 2,
+  });
+  const port = createSharedStorePort('connection', undefined, 'android-shared-files');
+  expect(port.identity).toBe('android-shared:connection');
+  const lease = await port.acquire('models/revision/model.gguf');
+  expect(lease.resource?.kind).toBe('android-file-descriptor');
+  expect(await lease.resource?.openDescriptor()).toEqual({
+    kind: 'android-file-descriptor', descriptor: 41, descriptorVersion: 2,
+    device: '12', inode: '34', size: '56',
+  });
+  expect(native.prepareLeaseForRuntime).toHaveBeenCalledWith('android-lease');
+  await lease.release();
 });
 it('records only artifact acquisition and hashes/stats that lease without acquiring another resource', async () => {
   const observed = vi.fn(); const port = createSharedStorePort('connection', observed);

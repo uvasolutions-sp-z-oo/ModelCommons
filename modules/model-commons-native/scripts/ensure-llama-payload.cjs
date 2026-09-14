@@ -4,12 +4,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { nativeArtifactEnv } = require('./native-artifact-env.cjs');
+const { applyLlamaRnAndroidFdPatch } = require('./patch-llama-rn-android-fd.cjs');
 const project = process.cwd();
 const dependency = path.dirname(require.resolve('llama.rn/package.json', { paths: [project] }));
 const manifest = JSON.parse(fs.readFileSync(path.join(dependency, 'package.json'), 'utf8'));
 if (manifest.version !== '0.12.9') throw new Error('Local AI requires the reviewed llama.rn 0.12.9 payload.');
-if (process.env.RNLLAMA_SKIP_POSTINSTALL === '1' || process.env.RNLLAMA_BUILD_FROM_SOURCE === '1') {
-  throw new Error('The alpha acceptance path requires the pinned, verified prebuilt engine payload.');
+const descriptorPatch = applyLlamaRnAndroidFdPatch(dependency);
+if (process.env.RNLLAMA_SKIP_POSTINSTALL === '1') {
+  throw new Error('The acceptance path requires the pinned, verified llama.rn payload.');
 }
 const artifacts = JSON.parse(fs.readFileSync(path.join(dependency, 'install/native-artifacts.json'), 'utf8')).artifacts;
 const expected = {
@@ -34,4 +36,4 @@ if (!present()) {
   ], { cwd: project, env: nativeArtifactEnv(), stdio: 'inherit' });
   if (result.error || result.status !== 0 || !present()) throw new Error('Native engine payload is missing; stop before producing an unusable binary.');
 }
-process.stdout.write('Pinned llama.rn Apple/Android artifact markers and device payloads are present. This is not device inference verification.\n');
+process.stdout.write(`Pinned llama.rn payloads are present; ${descriptorPatch.patchId} is applied. This is not device inference verification.\n`);

@@ -12,6 +12,7 @@ import type {
   NativeAvailability,
   NativeDeviceProfile,
   NativeLeaseDescriptor,
+  NativeRuntimeDescriptor,
   PendingAndroidClient,
   SharedDirectoryConnection,
 } from './types';
@@ -189,6 +190,11 @@ export class ModelFileLease {
   readonly id: string;
   readonly connectionId: string;
   readonly uri: string;
+  readonly resource?: {
+    kind: 'android-file-descriptor';
+    descriptorVersion: 2;
+    openDescriptor(): Promise<NativeRuntimeDescriptor>;
+  };
   private released = false;
   private releasePromise?: Promise<void>;
 
@@ -196,6 +202,31 @@ export class ModelFileLease {
     this.id = descriptor.id;
     this.connectionId = descriptor.connectionId;
     this.uri = descriptor.uri;
+    if (descriptor.resourceKind === 'android-file-descriptor') {
+      this.resource = {
+        kind: 'android-file-descriptor',
+        descriptorVersion: 2,
+        openDescriptor: async () => {
+          if (this.released) {
+            throw new ModelCommonsError('STORAGE_UNAVAILABLE', 'The model file lease has been released.');
+          }
+          const prepared = await callNative(
+            () => (requireMethod('prepareLeaseForRuntime') as (value: string) => Promise<NativeRuntimeDescriptor>)(this.id),
+            NATIVE_ERRORS.acquireLease
+          );
+          if (prepared.kind !== 'android-file-descriptor'
+            || prepared.descriptorVersion !== 2
+            || !Number.isSafeInteger(prepared.descriptor)
+            || prepared.descriptor < 0
+            || !isNativeIdentity(prepared.device)
+            || !isNativeIdentity(prepared.inode)
+            || !isNativeIdentity(prepared.size, false)) {
+            throw new ModelCommonsError('RUNTIME_UNAVAILABLE', 'The native runtime descriptor contract is incompatible.');
+          }
+          return prepared;
+        },
+      };
+    }
   }
 
   async sha256(): Promise<string> {
@@ -232,6 +263,11 @@ export class ModelFileLease {
   }
 }
 
+function isNativeIdentity(value: unknown, allowZero = true): value is string {
+  return typeof value === 'string' && /^(0|[1-9][0-9]{0,19})$/.test(value)
+    && (allowZero || value !== '0');
+}
+
 export async function acquireModelLease(connectionId: string, relativePath: string): Promise<ModelFileLease> {
   const descriptor = await callNative(
     () => (requireMethod('acquireModelLease') as (
@@ -241,7 +277,8 @@ export async function acquireModelLease(connectionId: string, relativePath: stri
     NATIVE_ERRORS.acquireLease
   );
   const lease = new ModelFileLease(descriptor);
-  if (descriptor.coordinationVersion !== 1) {
+  const expectedCoordination = descriptor.resourceKind === 'android-file-descriptor' ? 2 : 1;
+  if (descriptor.coordinationVersion !== expectedCoordination) {
     await lease.release();
     throw new ModelCommonsError('RUNTIME_UNAVAILABLE', 'Shared models require a new native build with lifetime coordination.');
   }

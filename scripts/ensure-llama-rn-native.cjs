@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { nativeArtifactEnv } = require('../modules/model-commons-native/scripts/native-artifact-env.cjs');
+const { applyLlamaRnAndroidFdPatch } = require('../modules/model-commons-native/scripts/patch-llama-rn-android-fd.cjs');
 
 function hasArm64NativePayload(projectRoot, fsModule = fs) {
   const nativeDir = path.join(
@@ -33,6 +34,9 @@ function ensureLlamaRnNativeArtifacts(projectRoot, options = {}) {
   const fsModule = options.fsModule ?? fs;
   const spawn = options.spawn ?? spawnSync;
   const output = options.output ?? console;
+  const applyDescriptorPatch = options.applyDescriptorPatch ?? applyLlamaRnAndroidFdPatch;
+  const dependencyRoot = path.join(projectRoot, 'node_modules', 'llama.rn');
+  applyDescriptorPatch(dependencyRoot);
   if (hasArm64NativePayload(projectRoot, fsModule)) {
     output.log('llama.rn: verified Android native payload is present.');
     return;

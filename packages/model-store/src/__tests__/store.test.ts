@@ -45,6 +45,25 @@ describe('verified store ownership and publication', () => {
     expect(stat).toHaveBeenCalledTimes(2); expect(sha256).toHaveBeenCalledTimes(1);
     await resource.lease.release();
   });
+  it('preserves a native descriptor resource through verified model acquisition', async () => {
+    const f = fixture(); await f.store.install(model.id);
+    const descriptor = { kind: 'android-file-descriptor' as const, descriptorVersion: 2 as const,
+      descriptor: 41, device: '12', inode: '34', size: String(model.files[0].sizeBytes!) };
+    const openDescriptor = vi.fn(async () => descriptor);
+    f.port.acquire = async (path) => ({
+      id: path,
+      uri: 'modelcommons-native://android-file-descriptor',
+      resource: { kind: 'android-file-descriptor', descriptorVersion: 2, openDescriptor },
+      stat: async () => ({ size: model.files[0].sizeBytes!, regular: true }),
+      sha256: async () => model.files[0].integrity!.digest,
+      release: async () => {},
+    });
+    const resource = await createReadOnlyModelStore(f.port, f.policy).acquire(model.id);
+    expect(resource.lease.resource?.kind).toBe('android-file-descriptor');
+    expect(await resource.lease.resource?.openDescriptor()).toEqual(descriptor);
+    expect(openDescriptor).toHaveBeenCalledOnce();
+    await resource.lease.release();
+  });
   it('reports unresolved resource cleanup on integrity failure', async () => {
     const f = fixture(); await f.store.install(model.id);
     f.port.acquire = async (path) => ({ id: path, uri: 'file:///leased/artifact.gguf',

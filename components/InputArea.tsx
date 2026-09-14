@@ -7,15 +7,19 @@ export function InputArea({
   onSend,
   onCancel,
   loading = false,
+  disabled = false,
+  placeholder = 'Message the selected local model',
 }: {
   onSend: (text: string) => void;
   onCancel?: () => void;
   loading?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
 }) {
   const [text, setText] = useState('');
   const submit = () => {
     const value = text.trim();
-    if (!value || loading) return;
+    if (!value || loading || disabled) return;
     setText('');
     onSend(value);
   };
@@ -24,21 +28,21 @@ export function InputArea({
     <View style={styles.container}>
       <TextInput
         accessibilityLabel="Local chat message"
-        placeholder="Message the selected local model"
+        placeholder={placeholder}
         placeholderTextColor="#8090A2"
         multiline
         maxLength={16_000}
         value={text}
         onChangeText={setText}
         style={styles.input}
-        editable={!loading}
+        editable={!loading && !disabled}
       />
       {loading ? (
         <TouchableOpacity accessibilityLabel="Cancel generation" onPress={onCancel} style={styles.cancel}>
           <Ionicons name="stop" size={19} color="#fff" />
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity accessibilityLabel="Send" onPress={submit} disabled={!text.trim()} style={[styles.send, !text.trim() && styles.disabled]}>
+        <TouchableOpacity accessibilityLabel="Send" onPress={submit} disabled={!text.trim() || disabled} style={[styles.send, (!text.trim() || disabled) && styles.disabled]}>
           <Ionicons name="arrow-up" size={21} color="#fff" />
         </TouchableOpacity>
       )}

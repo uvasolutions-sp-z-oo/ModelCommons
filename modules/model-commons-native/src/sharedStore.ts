@@ -5,7 +5,11 @@ import nativeModule from './nativeModule';
 import { callNative } from './nativeError';
 
 /** Every read uses the same native authorized connection as the artifact. */
-export function createSharedStorePort(connectionId: string, onAcquire?: () => void): ReadStorePort {
+export function createSharedStorePort(
+  connectionId: string,
+  onAcquire?: () => void,
+  connectionKind: 'security-scoped' | 'app-group' | 'android-shared-files' = 'security-scoped'
+): ReadStorePort {
   if (!connectionId) throw new ModelCommonsError('PERMISSION_REQUIRED', 'Choose a shared model directory first.');
   const acquire = (path: string) => acquireModelLease(connectionId, assertSafeRelativePath(path));
   async function read<T>(path: string, operation: (leaseId: string) => Promise<T>): Promise<T> {
@@ -17,7 +21,11 @@ export function createSharedStorePort(connectionId: string, onAcquire?: () => vo
     } finally { await lease.release(); }
   }
   return {
-    identity: `ios-shared:${connectionId}`,
+    identity: connectionKind === 'android-shared-files'
+      ? `android-shared:${connectionId}`
+      : connectionKind === 'app-group'
+        ? `ios-app-group:${connectionId}`
+        : `ios-shared:${connectionId}`,
     async acquire(path) {
       const lease = await acquire(path);
       try { onAcquire?.(); return lease; }

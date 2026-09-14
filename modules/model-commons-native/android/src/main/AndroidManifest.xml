@@ -10,5 +10,17 @@
         <action android:name="org.modelcommons.action.BIND" />
       </intent-filter>
     </service>
+    <!-- The config plugin enables/exports this only in the designated store owner. -->
+    <provider
+      android:name="expo.modules.modelcommonsnative.provider.ModelCommonsDocumentsProvider"
+      android:authorities="${applicationId}.modelcommons.documents"
+      android:enabled="false"
+      android:exported="false"
+      android:grantUriPermissions="true"
+      android:permission="android.permission.MANAGE_DOCUMENTS">
+      <intent-filter>
+        <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+      </intent-filter>
+    </provider>
   </application>
 </manifest>

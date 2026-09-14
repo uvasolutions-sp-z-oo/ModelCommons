@@ -4,6 +4,7 @@ export interface NativeAvailability {
   available: boolean;
   platform: NativePlatform;
   androidHubConnected: boolean;
+  androidSharedModels?: boolean;
   iosSharedModels: boolean;
   reason?: 'NATIVE_MODULE_MISSING' | 'UNSUPPORTED_PLATFORM';
 }
@@ -21,7 +22,7 @@ export interface NativeDeviceProfile {
 
 export interface SharedDirectoryConnection {
   id: string;
-  kind: 'security-scoped' | 'app-group';
+  kind: 'security-scoped' | 'app-group' | 'android-shared-files';
   displayName: string;
   groupIdentifier?: string;
 }
@@ -30,7 +31,18 @@ export interface NativeLeaseDescriptor {
   id: string;
   connectionId: string;
   uri: string;
+  resourceKind?: 'android-file-descriptor';
   coordinationVersion?: number;
+}
+
+export interface NativeRuntimeDescriptor {
+  kind: 'android-file-descriptor';
+  descriptor: number;
+  descriptorVersion: 2;
+  /** Canonical decimal native identity, kept as strings to preserve 64-bit values. */
+  device: string;
+  inode: string;
+  size: string;
 }
 
 export interface AndroidServiceInfo {
@@ -113,6 +125,7 @@ export interface ModelCommonsNativeModuleShape {
   sha256Lease?(leaseId: string): Promise<string>;
   readLeaseMetadata?(leaseId: string): Promise<string>;
   statLease?(leaseId: string): Promise<{ size: number; regular: boolean }>;
+  prepareLeaseForRuntime?(leaseId: string): Promise<NativeRuntimeDescriptor>;
 
   connectAndroidHub?(packageName: string, certificates: string[]): Promise<AndroidServiceInfo>;
   androidAcknowledge?(sessionId: string, requestId: string, sequence: number): Promise<AndroidOperationResult>;

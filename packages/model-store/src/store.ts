@@ -9,6 +9,19 @@ import { assertDownloadOrigin, snapshotPolicy, trustedManifest, type StorePolicy
 export interface ResourceLease {
   id: string;
   uri: string;
+  /** Native backing for runtimes that can consume an authorized descriptor directly. */
+  resource?: {
+    kind: 'android-file-descriptor';
+    descriptorVersion: 2;
+    openDescriptor(): Promise<{
+      kind: 'android-file-descriptor';
+      descriptorVersion: 2;
+      descriptor: number;
+      device: string;
+      inode: string;
+      size: string;
+    }>;
+  };
   /** Optional lease-local access. Shared native ports must implement both. */
   stat?(): Promise<{ size: number; regular: boolean } | null>;
   sha256?(): Promise<string>;
@@ -133,6 +146,7 @@ export function createModelStore(options: {
       let pending: Promise<void> | undefined;
       return { manifest, lease: {
         id: `${port.identity}:${result.id}`, uri: result.uri,
+        ...(result.resource ? { resource: result.resource } : {}),
         inspectFile: () => result.inspectFile(),
         release() {
           if (released) return Promise.resolve();
@@ -287,6 +301,7 @@ async function acquireVerified(port: ReadStorePort, manifest: ModelManifest) {
     }
     return {
       id: lease.id, uri: lease.uri,
+      ...(lease.resource ? { resource: lease.resource } : {}),
       async release() { for (const resource of [...held].reverse()) await resource.release(); },
       async inspectFile() {
         const info = await (lease.stat ? lease.stat() : port.stat(artifactRelativePath(manifest, file.path)));

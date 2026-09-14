@@ -1,6 +1,6 @@
 {
   "name": "@modelcommons/model-store",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Verified model storage with injected I/O and trust policy.",
   "license": "MIT",
   "type": "module",

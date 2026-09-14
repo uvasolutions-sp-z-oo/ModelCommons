@@ -14,6 +14,7 @@ import { classifyInitFailure, modelLocationKind, type InitFailureStage } from '.
 import {
   LLAMA_RN_RUNTIME_ID,
   LLAMA_RN_VERSION,
+  type AndroidFileDescriptorHandle,
   type CreateLlamaRnSessionOptions,
   type LlamaRnAvailability,
   type LlamaRnContext,
@@ -49,11 +50,29 @@ function nextId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${idCounter.toString(36)}`;
 }
 
+function validatedDescriptorHandle(value: unknown): AndroidFileDescriptorHandle {
+  const handle = value as Partial<AndroidFileDescriptorHandle> | null;
+  const decimal = (candidate: unknown, allowZero = true) => typeof candidate === 'string'
+    && /^(0|[1-9][0-9]{0,19})$/.test(candidate) && (allowZero || candidate !== '0');
+  if (!handle || handle.kind !== 'android-file-descriptor' || handle.descriptorVersion !== 2
+    || !Number.isSafeInteger(handle.descriptor) || handle.descriptor! < 0 || handle.descriptor! > 0x7fffffff
+    || !decimal(handle.device) || !decimal(handle.inode) || !decimal(handle.size, false)) {
+    throw new ModelCommonsError(
+      'RUNTIME_UNAVAILABLE',
+      'The native runtime descriptor contract is incompatible.',
+      { details: { initFailureKind: 'NATIVE_BINDING_UNAVAILABLE' } }
+    );
+  }
+  return handle as AndroidFileDescriptorHandle;
+}
+
 function contextKey(options: CreateLlamaRnSessionOptions): string {
   const modelUri = options.model.lease?.uri ?? options.model.uri;
+  const resource = options.model.lease?.resource ?? options.model.resource;
   return JSON.stringify({
     modelUri,
     leaseId: options.model.lease?.id,
+    resourceKind: resource?.kind,
     profile: options.profile.llama,
   });
 }
@@ -102,13 +121,43 @@ class ContextPool {
       let context: LlamaRnContext | undefined;
       const lease = options.model.lease;
       const uri = lease?.uri ?? options.model.uri;
+      const nativeResource = lease?.resource ?? options.model.resource;
       let failureStage: InitFailureStage = 'loadModule';
       let fileCheck: { present: boolean; regular: boolean; sizeMatches: boolean } | undefined;
       let modelInfoProbe: 'not-requested' | 'pending' | 'passed' | 'failed' = 'not-requested';
       try {
         const llama = await this.loadModule();
         failureStage = 'contextParams';
-        const params = contextParams(uri, options.profile);
+        if (nativeResource && (!lease || lease.resource !== nativeResource
+          || typeof lease.id !== 'string' || lease.id.length < 1 || lease.id.length > 256)) {
+          throw new ModelCommonsError(
+            'RUNTIME_UNAVAILABLE',
+            'Android descriptor models require their originating opaque native lease.',
+            { details: { initFailureKind: 'INVALID_RUNTIME_PARAMETER' } }
+          );
+        }
+        const descriptorSupport = (llama as unknown as {
+          ModelCommonsDescriptorSupport?: { version?: number; ownership?: string };
+        }).ModelCommonsDescriptorSupport;
+        if (nativeResource && (descriptorSupport?.version !== 2
+          || descriptorSupport.ownership !== 'runtime-validates-and-duplicates-descriptor')) {
+          throw new ModelCommonsError(
+            'RUNTIME_UNAVAILABLE',
+            'This Android build does not include descriptor-capable llama.rn support.',
+            { details: { initFailureKind: 'NATIVE_BINDING_UNAVAILABLE' } }
+          );
+        }
+        const params: Parameters<LlamaRnModule['initLlama']>[0] & {
+          model_fd?: number;
+          model_fd_device?: string;
+          model_fd_inode?: string;
+          model_fd_size?: string;
+        } = nativeResource
+          ? ({
+              ...contextParams('/modelcommons/native-descriptor.gguf', options.profile),
+              model: 'modelcommons-native-descriptor',
+            })
+          : contextParams(uri, options.profile);
         // Keep scope active for both the diagnostic read and the native mmap.
         // This repeats only stat; the store already verified size and SHA-256.
         failureStage = 'modelFileCheck';
@@ -123,7 +172,7 @@ class ContextPool {
             );
           }
         }
-        if (options.diagnosticModelInfo) {
+        if (options.diagnosticModelInfo && !nativeResource) {
           failureStage = 'loadLlamaModelInfo';
           modelInfoProbe = 'pending';
           // 0.12.9 passes ctx=null to GGUF: metadata/tensor descriptors only,
@@ -132,6 +181,13 @@ class ContextPool {
           modelInfoProbe = 'passed';
         }
         failureStage = 'initLlama';
+        if (nativeResource) {
+          const descriptor = validatedDescriptorHandle(await nativeResource.openDescriptor());
+          params.model_fd = descriptor.descriptor;
+          params.model_fd_device = descriptor.device;
+          params.model_fd_inode = descriptor.inode;
+          params.model_fd_size = descriptor.size;
+        }
         recordLlamaInitialization();
         context = await llama.initLlama(params);
         failureStage = 'reportCapabilities';
@@ -194,7 +250,8 @@ class ContextPool {
               : 'llama.rn failed to initialize the selected model and profile.',
           { cause: error, retryable: error instanceof ModelCommonsError ? error.retryable : nativeBindingsUnavailable,
             details: {
-              failureStage, initFailureKind, modelLocationKind: modelLocationKind(uri), modelInfoProbe,
+              failureStage, initFailureKind, modelLocationKind: nativeResource
+                ? 'native-file-descriptor' : modelLocationKind(uri), modelInfoProbe,
               ...(fileCheck ? {
                 modelFilePresentBeforeInit: fileCheck.present === true,
                 modelFileRegularBeforeInit: fileCheck.regular === true,

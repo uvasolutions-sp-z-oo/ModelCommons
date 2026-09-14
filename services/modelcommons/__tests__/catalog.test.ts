@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseModelManifest, type ModelRegistry } from '@modelcommons/protocol';
 import {
@@ -70,6 +72,32 @@ describe('built-in model catalog', () => {
     expect(getCatalogPresentation(QWEN25_05B_INSTRUCT.id)?.tier).toBe('starter');
     expect(getCatalogPresentation('unsloth/medgemma-4b-it-gguf:q4-k-m')?.tier).toBe('general');
     expect(getCatalogPresentation(QWEN3_30B_A3B_EXPERIMENT.id)?.tier).toBe('experimental');
+  });
+
+  it('keeps the Android CPU host pins aligned with the catalog manifests', () => {
+    const resolver = fs.readFileSync(path.join(
+      process.cwd(),
+      'modules/model-commons-inference-host/android/src/main/java/org/modelcommons/host/VerifiedArtifactResolver.kt'
+    ), 'utf8');
+    const pins = [...resolver.matchAll(
+      /Pin\("([^"]+)",\s*"([a-f0-9]{40})",\s*"([^"]+)",\s*(\d+),\s*"([a-f0-9]{64})"/g
+    )].map((match) => ({
+      id: match[1],
+      revision: match[2],
+      storageId: match[3],
+      sizeBytes: Number(match[4]),
+      digest: match[5],
+    }));
+
+    expect(pins).not.toHaveLength(0);
+    for (const pin of pins) {
+      const manifest = MODEL_CATALOG.find((candidate) => candidate.id === pin.id);
+      expect(manifest, `Missing catalog manifest for Android host pin ${pin.id}`).toBeDefined();
+      expect(pin.revision).toBe(manifest?.revision);
+      expect(pin.storageId).toBe(manifest?.storageId);
+      expect(pin.sizeBytes).toBe(manifest?.files[0]?.sizeBytes);
+      expect(pin.digest).toBe(manifest?.files[0]?.integrity?.digest);
+    }
   });
 
   it('selects automatic text models deterministically and honors an explicit model ID', () => {

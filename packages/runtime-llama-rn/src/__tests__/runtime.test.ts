@@ -28,6 +28,122 @@ const request: ModelCommonsRequest = {
 };
 
 describe('LlamaRnRuntime lifecycle', () => {
+  it('requires descriptor-capable native bindings before borrowing an Android model descriptor', async () => {
+    const openDescriptor = vi.fn(async () => ({
+      kind: 'android-file-descriptor' as const, descriptorVersion: 2 as const,
+      descriptor: 41, device: '12', inode: '34', size: '56',
+    }));
+    const release = vi.fn(async () => undefined);
+    const runtime = createLlamaRnRuntime({
+      loadModule: async () => ({ initLlama: vi.fn() } as never),
+    });
+    await expect(runtime.createSession({
+      model: {
+        id: 'shared-android',
+        uri: 'modelcommons-native://android-file-descriptor',
+        lease: {
+          id: 'lease-android',
+          uri: 'modelcommons-native://android-file-descriptor',
+          resource: { kind: 'android-file-descriptor', descriptorVersion: 2, openDescriptor },
+          release,
+        },
+      },
+      profile,
+    })).rejects.toMatchObject({
+      code: 'RUNTIME_UNAVAILABLE',
+      message: 'This Android build does not include descriptor-capable llama.rn support.',
+    });
+    expect(openDescriptor).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('passes a native-owned descriptor to the patched runtime and releases it after the context', async () => {
+    const lifecycle: string[] = [];
+    const initLlama = vi.fn(async (params: Record<string, unknown>) => ({
+      gpu: false, devices: [], reasonNoGPU: 'CPU profile',
+      model: { desc: 'descriptor model', size: 1, nParams: 1, is_recurrent: false, is_hybrid: false,
+        chatTemplates: { llamaChat: false, jinja: { default: true,
+          defaultCaps: { tools: false, toolCalls: false, systemRole: true, parallelToolCalls: false }, toolUse: false } } },
+      isJinjaSupported: () => true, isLlamaChatSupported: () => false,
+      clearCache: vi.fn(), completion: vi.fn(), stopCompletion: vi.fn(),
+      release: vi.fn(async () => { lifecycle.push('context.release'); }),
+      params,
+    }));
+    const runtime = createLlamaRnRuntime({
+      loadModule: async () => ({
+        ModelCommonsDescriptorSupport: { version: 2, ownership: 'runtime-validates-and-duplicates-descriptor' },
+        initLlama,
+      } as never),
+    });
+    const session = await runtime.createSession({
+      model: {
+        id: 'shared-android', uri: 'modelcommons-native://android-file-descriptor',
+        lease: {
+          id: 'lease-android', uri: 'modelcommons-native://android-file-descriptor',
+          resource: { kind: 'android-file-descriptor', descriptorVersion: 2, openDescriptor: async () => ({
+            kind: 'android-file-descriptor', descriptorVersion: 2,
+            descriptor: 41, device: '12', inode: '34', size: '56',
+          }) },
+          release: async () => { lifecycle.push('lease.release'); },
+        },
+      },
+      profile,
+    });
+    expect(initLlama).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'modelcommons-native-descriptor', model_fd: 41,
+      model_fd_device: '12', model_fd_inode: '34', model_fd_size: '56',
+      use_mmap: true, use_mlock: false,
+    }));
+    await session.release();
+    expect(lifecycle).toEqual(['context.release', 'lease.release']);
+  });
+
+  it('rejects a descriptor whose native identity is missing before calling JSI', async () => {
+    const initLlama = vi.fn();
+    const release = vi.fn(async () => undefined);
+    const runtime = createLlamaRnRuntime({
+      loadModule: async () => ({
+        ModelCommonsDescriptorSupport: { version: 2, ownership: 'runtime-validates-and-duplicates-descriptor' },
+        initLlama,
+      } as never),
+    });
+    await expect(runtime.createSession({
+      model: {
+        id: 'shared-android', uri: 'modelcommons-native://android-file-descriptor',
+        lease: {
+          id: 'lease-invalid', uri: 'modelcommons-native://android-file-descriptor', release,
+          resource: { kind: 'android-file-descriptor', descriptorVersion: 2,
+            openDescriptor: async () => ({ kind: 'android-file-descriptor', descriptorVersion: 2,
+              descriptor: 41, device: '12', inode: '34', size: '0' }) },
+        },
+      },
+      profile,
+    })).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' });
+    expect(initLlama).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('does not accept a descriptor resource detached from its opaque native lease', async () => {
+    const initLlama = vi.fn();
+    const runtime = createLlamaRnRuntime({
+      loadModule: async () => ({
+        ModelCommonsDescriptorSupport: { version: 2, ownership: 'runtime-validates-and-duplicates-descriptor' },
+        initLlama,
+      } as never),
+    });
+    await expect(runtime.createSession({
+      model: {
+        id: 'shared-android', uri: 'modelcommons-native://android-file-descriptor',
+        resource: { kind: 'android-file-descriptor', descriptorVersion: 2, openDescriptor: async () => ({
+          kind: 'android-file-descriptor', descriptorVersion: 2,
+          descriptor: 41, device: '12', inode: '34', size: '56',
+        }) },
+      },
+      profile,
+    })).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' });
+    expect(initLlama).not.toHaveBeenCalled();
+  });
+
   it('budgets rendered instructions and output before native generation without trimming', async () => {
     const context = {
       gpu: false, devices: [], reasonNoGPU: 'CPU profile',

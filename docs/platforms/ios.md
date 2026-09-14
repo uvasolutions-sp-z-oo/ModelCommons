@@ -135,8 +135,8 @@ private provisioning call to a shared request.
 
 Storage owner is the shared store; execution owner is the consuming application.
 Each app creates its own llama context, KV cache and allocations. No shared iOS
-inference daemon or RAM deduplication is claimed. Android centralized execution
-remains a separate task.
+inference daemon or RAM deduplication is claimed. Normal Android sharing now
+uses the same ownership split through SAF and a native descriptor lease.
 
 The default Hub destination for model metadata/artifacts is Documents; an
 explicitly configured owner can instead select App Group storage. Chat,
@@ -146,7 +146,7 @@ other Documents consumer. Existing user-created or old-version Documents files
 cannot be audited from source; the owner must inspect the test installation.
 S&P's Documents area is not exposed by its native plugin configuration.
 
-S&P diagnostic report v4 adds observed shared acquisition, verified artifact
+S&P diagnostic report v6 includes observed shared acquisition, verified artifact
 metadata, transport and bounded SDK-private GGUF inventory/call counters. It
 exports no content, filenames, URLs, bookmarks or physical file identifiers.
 Measurements are null when unavailable. See the

@@ -16,17 +16,19 @@ See the [evidence record](verification/ios-shared-models.md) for the exact scope
 
 1. **Complete the iOS evidence pack.** Add exact model, OS and build identities,
    sanitized screenshots/diagnostics, and repeated offline runs.
-2. **Verify Android centralized inference.** Exercise two signed apps through
-   Binder, including authorization, cancellation, client death, revocation and
-   cleanup. The native CPU host compiles; device acceptance is still pending.
+2. **Verify Android shared files.** Exercise two distinct app UIDs through the
+   SAF grant and descriptor loader, including restart, cancellation, revocation,
+   no-copy inspection, owner mutation and cleanup. Device acceptance is pending.
 3. **Broaden iOS coverage.** Test restart and bookmark restoration, Hub-closed
    operation, cancellation, memory pressure, separate App Group provisioning,
    and a client signed by an unrelated developer team.
-4. **Improve contributor integration.** Add runnable minimal clients, a reviewed
+4. **Evaluate experimental Android Binder inference.** Keep cross-app execution
+   separate from normal shared files and test it only when explicitly enabled.
+5. **Improve contributor integration.** Add runnable minimal clients, a reviewed
    npm release pipeline, package/version migration guidance, and CI evidence.
-5. **Harden protocol and lifecycle boundaries.** Expand compatibility and failure
+6. **Harden protocol and lifecycle boundaries.** Expand compatibility and failure
    cases, retention/deletion documentation, and device security/privacy review.
-6. **Validate provider-shaped paths on mobile.** Keep exact subsets documented;
+7. **Validate provider-shaped paths on mobile.** Keep exact subsets documented;
    Anthropic streaming requires early input-token usage that the current
    llama.rn stream does not emit. Official SDK validation remains separate.
 

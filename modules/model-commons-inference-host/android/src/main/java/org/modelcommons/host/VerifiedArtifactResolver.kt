@@ -19,7 +19,7 @@ internal class VerifiedArtifactResolver(context: Context) {
   companion object {
     val pins = listOf(
       Pin("unsloth/smollm2-135m-instruct-gguf:q4-k-m", "9e6855bc4be717fca1ef21360a1db4b29d5c559a",
-        "smollm2-135m-instruct-q4-k-m-9e6855bc4be71", 105454144,
+        "smollm2-135m-instruct-q4-k-m-9e6855bc4be7", 105454144,
         "ed5fa30c487b282ec156c29062f1222e5c20875a944ac98289dbd242e947f747"),
       Pin("unsloth/smollm2-360m-instruct-gguf:q4-k-m", "391ed11137586e383b1be0fab9acf01d282c2e11",
         "smollm2-360m-instruct-q4-k-m-391ed1113758", 270590560,

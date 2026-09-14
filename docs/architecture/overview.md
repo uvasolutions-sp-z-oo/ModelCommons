@@ -16,8 +16,8 @@ provider  transport  runtime
  adapters             registry
      |       |        |
  OpenAI   in-process  llama.rn
-Anthropic   Binder    future engines
-          shared-file
+Anthropic shared-file future engines
+          Binder
 ```
 
 Core packages must not import MedGemma defaults, medical prompts, medical
@@ -100,8 +100,8 @@ mobile prerequisite.
 Transport answers “how does this request reach execution?”
 
 - in-process transport for the Hub or an app with an optional runtime;
-- Android Binder/AIDL for cross-application Hub execution;
-- iOS App Group or user-granted shared-file access for artifacts;
+- Android SAF and iOS App Group/user-granted access for shared artifacts;
+- optional experimental Android Binder/AIDL for Hub execution;
 - future system-model transports.
 
 Authorization belongs at the transport/native boundary. Provider dummy API keys
@@ -170,10 +170,11 @@ A provider request for strict schema output must fail with
 
 ## Platform asymmetry
 
-Android can centralize both storage and inference in the Hub. iOS App Groups can
-share storage between same-team apps; unrelated iOS apps can share a user-granted
-file but generally execute in their own process. This asymmetry is intentional
-and must not be concealed behind capability claims.
+Normal Android and iOS sharing centralizes storage in ModelCommons while each
+consumer executes in its own process. Android uses a SAF DocumentsProvider and
+native descriptor lease. iOS uses App Groups for same-team apps or a
+user-granted Files bookmark. Optional Android Binder inference remains a
+separate experimental transport.
 
 ## Trust boundaries
 
@@ -181,7 +182,8 @@ The major boundaries are:
 
 - Internet/model host -> downloader and verifier;
 - manifest/client config -> parser and path resolver;
-- client process -> Android Hub Binder service;
+- Android DocumentsProvider/tree grant -> consuming app descriptor lease;
+- optional client process -> Android Hub Binder service;
 - Files provider/bookmark -> iOS consuming app;
 - model output -> application tool host;
 - provider wire request -> compatibility adapter;
@@ -201,10 +203,11 @@ the shared model storage and Sales & Pricing Mobile owns offline execution.
 See the [evidence record](../verification/ios-shared-models.md) for captured facts
 and missing metadata. App Groups and separately signed clients are unverified.
 
-Android has a Binder API 2 connector and optional Hub-owned CPU host built from
-pinned llama.rn source. The native library compiles and links; signed two-app
-inference and security/lifecycle acceptance remain pending. Availability alone
-does not prove successful model loading or generation.
+Android SAF sharing has an owner-only read-only provider, persisted consumer
+grants, native descriptor leases, and a pinned descriptor-capable llama.rn
+source patch. Signed two-app generation and security/lifecycle acceptance remain
+pending. The Binder API 2 connector and Hub CPU host remain an explicit
+experimental path.
 
 The Hub is generic. MedGemma-specific material remains confined to catalog,
 migration/tests and an isolated reference example. Provider-shaped adapters have

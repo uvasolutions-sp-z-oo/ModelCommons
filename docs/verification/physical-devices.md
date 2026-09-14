@@ -1,13 +1,15 @@
 # Physical-device verification
 
-Last updated: 2026-09-12. The [iOS Files record](ios-shared-models.md) contains
+Last updated: 2026-09-14. The [iOS Files record](ios-shared-models.md) contains
 an owner-verified offline test on a physical iPhone SE. The broader matrix below
 remains an acceptance plan, not a list of completed tests. That one result does
-not establish App Group, unrelated-team, Android Binder or lifecycle coverage.
+not establish App Group, unrelated-team, Android SAF/descriptors, experimental
+Binder, or lifecycle coverage.
 
 Simulator/emulator tests remain useful for UI and protocol failures, but they do
-not validate native memory pressure, signing/entitlements, Binder identity,
-security-scoped files, accelerator selection, thermals, or lifecycle cleanup.
+not validate native memory pressure, signing/entitlements, SAF grants,
+descriptor mapping, Binder identity, security-scoped files, accelerator
+selection, thermals, or lifecycle cleanup.
 
 ## Build identity and reproducibility
 

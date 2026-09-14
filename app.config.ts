@@ -75,6 +75,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         "./modules/model-commons-native/app.plugin.js",
         {
           androidHubService: true,
+          androidHubServiceExported: false,
+          androidSharedDocumentsProvider: true,
+          // The install hook patches llama.rn headers and common init together;
+          // compile both sides of that C++ ABI from the same reviewed source.
+          androidDescriptorRuntime: true,
           iosAppGroups: appGroup ? [appGroup] : [],
           iosOwnerAppGroup: storageDestination === 'app-group' ? appGroup : undefined,
           iosExposeDocumentsInFiles: true,
