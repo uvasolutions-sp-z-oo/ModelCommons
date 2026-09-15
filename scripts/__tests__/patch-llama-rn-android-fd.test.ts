@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // The build hook is CommonJS because npm invokes it before Metro or TypeScript.
@@ -22,6 +23,7 @@ describe('llama.rn Android descriptor source patch', () => {
     const files = [
       'package.json', 'src/types.ts', 'src/index.ts', 'cpp/common/common.h',
       'cpp/common/common.cpp', 'cpp/jsi/JSIParams.cpp', 'android/src/main/CMakeLists.txt',
+      'src/jsi.ts', 'cpp/jsi/RNLlamaJSI.cpp',
     ];
     for (const relative of files) {
       const destination = path.join(fixture, relative);
@@ -44,8 +46,25 @@ describe('llama.rn Android descriptor source patch', () => {
     expect(params).toContain('descriptor_stat.st_ino');
     expect(params).toContain('lseek(owned_model_fd, 0, SEEK_SET) == 0');
     expect(fs.readFileSync(path.join(fixture, 'cpp/common/common.h'), 'utf8')).toContain('fd_owner');
+    expect(fs.readFileSync(path.join(fixture, 'cpp/jsi/RNLlamaJSI.cpp'), 'utf8')).toContain(
+      'modelcommons_android_fd_v2_params_size() != sizeof(common_params)'
+    );
+    expect(fs.readFileSync(path.join(fixture, 'cpp/common/common.cpp'), 'utf8')).toContain(
+      'size_t modelcommons_android_fd_v2_params_size()'
+    );
+    expect(fs.readFileSync(path.join(fixture, 'src/index.ts'), 'utf8')).toContain(
+      'await installJsi()\n  return typeof modelCommonsNativeSupport'
+    );
     expect(fs.readFileSync(path.join(fixture, 'android/src/main/CMakeLists.txt'), 'utf8')).toContain(
       'requires RNLLAMA_BUILD_FROM_SOURCE=ON'
     );
+    const pins = fs.readFileSync(path.join(process.cwd(), 'modules/model-commons-inference-host/source-files.cmake'), 'utf8');
+    const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'modules/model-commons-inference-host/source-pin.json'), 'utf8'));
+    for (const relative of ['common/common.h', 'common/common.cpp', 'jsi/JSIParams.cpp', 'jsi/RNLlamaJSI.cpp']) {
+      const digest = crypto.createHash('sha256').update(fs.readFileSync(path.join(fixture, 'cpp', relative))).digest('hex');
+      const block = pins.split(`file(SHA256 "\${SRC}/${relative}" DIGEST)`)[1]?.split('endif()')[0];
+      expect(block, `Host must accept the exact reviewed patch at ${relative}`).toContain(digest);
+      expect(manifest.modelCommonsPatch.acceptedPatchedFiles[relative]).toBe(digest);
+    }
   });
 });

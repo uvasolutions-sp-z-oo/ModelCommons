@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PATCH_ID = 'modelcommons-android-fd-v2';
+const NATIVE_HANDSHAKE_VERSION = 1;
 
 function replaceOnce(root, relative, before, after) {
   const file = path.join(root, relative);
@@ -73,6 +74,13 @@ export async function initLlama(
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
+`) || changed;
+  // INT_MAX is also referenced by the shared parser when compiling iOS.
+  changed = replaceOnce(dependencyRoot, 'cpp/jsi/JSIParams.cpp',
+`#include <stdexcept>
+`,
+`#include <climits>
+#include <stdexcept>
 `) || changed;
   changed = replaceOnce(dependencyRoot, 'cpp/jsi/JSIParams.cpp',
 `        // Model path
@@ -225,6 +233,79 @@ if (RNLLAMA_BUILD_FROM_SOURCE)
         return;
     }
 `) || changed;
+  changed = replaceOnce(dependencyRoot, 'src/jsi.ts',
+`declare global {
+`,
+`declare global {
+  var llamaModelCommonsDescriptorSupport: (() => {
+    version: number; nativeHandshakeVersion: number; buildId: string; ownership: string
+  }) | undefined
+`) || changed;
+  changed = replaceOnce(dependencyRoot, 'src/index.ts',
+`let jsiBindings: JsiBindings | null = null
+`,
+`let jsiBindings: JsiBindings | null = null
+let modelCommonsNativeSupport: typeof globalThis.llamaModelCommonsDescriptorSupport
+`) || changed;
+  changed = replaceOnce(dependencyRoot, 'src/index.ts',
+`  jsiBindings = bindings as JsiBindings
+`,
+`  modelCommonsNativeSupport = global.llamaModelCommonsDescriptorSupport
+  delete global.llamaModelCommonsDescriptorSupport
+  jsiBindings = bindings as JsiBindings
+`) || changed;
+  changed = replaceOnce(dependencyRoot, 'src/index.ts',
+`export type TokenData = {
+`,
+`/** Queries the loaded JNI wrapper and its linked common core, before FD handoff. */
+export async function getModelCommonsDescriptorSupport() {
+  await installJsi()
+  return typeof modelCommonsNativeSupport === 'function' ? modelCommonsNativeSupport() : undefined
+}
+
+export type TokenData = {
+`) || changed;
+  changed = replaceOnce(dependencyRoot, 'cpp/common/common.cpp',
+`struct common_init_result::impl {
+`,
+`#if defined(__ANDROID__)
+extern "C" __attribute__((visibility("default"))) size_t modelcommons_android_fd_v2_params_size() {
+    return sizeof(common_params);
+}
+#endif
+
+struct common_init_result::impl {
+`) || changed;
+  changed = replaceOnce(dependencyRoot, 'cpp/jsi/RNLlamaJSI.cpp',
+`using namespace facebook;
+`,
+`#if defined(__ANDROID__)
+extern "C" size_t modelcommons_android_fd_v2_params_size();
+#endif
+
+using namespace facebook;
+`) || changed;
+  changed = replaceOnce(dependencyRoot, 'cpp/jsi/RNLlamaJSI.cpp',
+`        TaskManager::getInstance().reset();
+`,
+`        TaskManager::getInstance().reset();
+#if defined(__ANDROID__)
+        runtime.global().setProperty(runtime, "llamaModelCommonsDescriptorSupport",
+            jsi::Function::createFromHostFunction(runtime,
+                jsi::PropNameID::forAscii(runtime, "llamaModelCommonsDescriptorSupport"), 0,
+                [](jsi::Runtime& rt, const jsi::Value&, const jsi::Value*, size_t) -> jsi::Value {
+                    if (modelcommons_android_fd_v2_params_size() != sizeof(common_params)) {
+                        throw std::runtime_error("ModelCommons native descriptor ABI mismatch");
+                    }
+                    jsi::Object support(rt);
+                    support.setProperty(rt, "version", 2);
+                    support.setProperty(rt, "nativeHandshakeVersion", ${NATIVE_HANDSHAKE_VERSION});
+                    support.setProperty(rt, "buildId", jsi::String::createFromUtf8(rt, "${PATCH_ID}"));
+                    support.setProperty(rt, "ownership", jsi::String::createFromUtf8(rt, "runtime-validates-and-duplicates-descriptor"));
+                    return support;
+                }));
+#endif
+`) || changed;
   const marker = path.join(dependencyRoot, '.modelcommons-android-fd-v2');
   fs.writeFileSync(marker, `${PATCH_ID}\n`, 'utf8');
   return { changed, patchId: PATCH_ID };
@@ -237,4 +318,4 @@ if (require.main === module) {
   process.stdout.write(`${result.patchId}: ${result.changed ? 'applied' : 'already present'}\n`);
 }
 
-module.exports = { PATCH_ID, applyLlamaRnAndroidFdPatch };
+module.exports = { PATCH_ID, NATIVE_HANDSHAKE_VERSION, applyLlamaRnAndroidFdPatch };

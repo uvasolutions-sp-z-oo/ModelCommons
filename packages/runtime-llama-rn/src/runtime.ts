@@ -147,6 +147,24 @@ class ContextPool {
             { details: { initFailureKind: 'NATIVE_BINDING_UNAVAILABLE' } }
           );
         }
+        if (nativeResource) {
+          const query = (llama as unknown as {
+            getModelCommonsDescriptorSupport?: () => Promise<{
+              version?: number; ownership?: string; nativeHandshakeVersion?: number; buildId?: string;
+            } | undefined>;
+          }).getModelCommonsDescriptorSupport;
+          const unavailable = () => new ModelCommonsError('RUNTIME_UNAVAILABLE',
+            'The installed Android native runtime does not support verified descriptor loading.',
+            { details: { initFailureKind: 'NATIVE_BINDING_UNAVAILABLE' } });
+          let support: Awaited<ReturnType<NonNullable<typeof query>>>;
+          try { support = typeof query === 'function' ? await query() : undefined; }
+          catch { throw unavailable(); }
+          if (support?.version !== 2 || support.nativeHandshakeVersion !== 1
+            || support.buildId !== 'modelcommons-android-fd-v2'
+            || support.ownership !== 'runtime-validates-and-duplicates-descriptor') {
+            throw unavailable();
+          }
+        }
         const params: Parameters<LlamaRnModule['initLlama']>[0] & {
           model_fd?: number;
           model_fd_device?: string;
@@ -243,11 +261,13 @@ class ContextPool {
             : nativeBindingsUnavailable
               ? 'RUNTIME_UNAVAILABLE'
               : 'RUNTIME_INITIALIZATION_FAILED',
-          allocationFailure
-            ? 'llama.rn could not allocate enough memory for this model and profile.'
-            : nativeBindingsUnavailable
-              ? 'llama.rn native bindings are unavailable in this build.'
-              : 'llama.rn failed to initialize the selected model and profile.',
+          error instanceof ModelCommonsError
+            ? error.message
+            : allocationFailure
+              ? 'llama.rn could not allocate enough memory for this model and profile.'
+              : nativeBindingsUnavailable
+                ? 'llama.rn native bindings are unavailable in this build.'
+                : 'llama.rn failed to initialize the selected model and profile.',
           { cause: error, retryable: error instanceof ModelCommonsError ? error.retryable : nativeBindingsUnavailable,
             details: {
               failureStage, initFailureKind, modelLocationKind: nativeResource

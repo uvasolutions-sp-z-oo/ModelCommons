@@ -198,7 +198,7 @@ export class ModelFileLease {
   private released = false;
   private releasePromise?: Promise<void>;
 
-  constructor(descriptor: NativeLeaseDescriptor) {
+  constructor(descriptor: NativeLeaseDescriptor, private readonly verificationSignal?: AbortSignal) {
     this.id = descriptor.id;
     this.connectionId = descriptor.connectionId;
     this.uri = descriptor.uri;
@@ -233,10 +233,20 @@ export class ModelFileLease {
     if (this.released) {
       throw new ModelCommonsError('STORAGE_UNAVAILABLE', 'The model file lease has been released.');
     }
-    return callNative(
-      () => (requireMethod('sha256Lease') as (value: string) => Promise<string>)(this.id),
-      NATIVE_ERRORS.hashFile
-    );
+    const signal = this.verificationSignal;
+    const cancelled = () => new ModelCommonsError('USER_CANCELLED', 'Shared model verification cancelled.');
+    if (signal?.aborted) throw cancelled();
+    const cancelNative = this.resource && signal ? requireMethod('cancelLeaseVerification') : undefined;
+    const onAbort = () => { cancelNative?.(this.id); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      const digest = await callNative(
+        () => (requireMethod('sha256Lease') as (value: string) => Promise<string>)(this.id),
+        NATIVE_ERRORS.hashFile
+      );
+      if (signal?.aborted) throw cancelled();
+      return digest;
+    } finally { signal?.removeEventListener('abort', onAbort); }
   }
 
   async stat(): Promise<{ size: number; regular: boolean }> {
@@ -268,7 +278,8 @@ function isNativeIdentity(value: unknown, allowZero = true): value is string {
     && (allowZero || value !== '0');
 }
 
-export async function acquireModelLease(connectionId: string, relativePath: string): Promise<ModelFileLease> {
+export async function acquireModelLease(connectionId: string, relativePath: string, signal?: AbortSignal): Promise<ModelFileLease> {
+  if (signal?.aborted) throw new ModelCommonsError('USER_CANCELLED', 'Shared model acquisition cancelled.');
   const descriptor = await callNative(
     () => (requireMethod('acquireModelLease') as (
       connection: string,
@@ -276,7 +287,11 @@ export async function acquireModelLease(connectionId: string, relativePath: stri
     ) => Promise<NativeLeaseDescriptor>)(connectionId, relativePath),
     NATIVE_ERRORS.acquireLease
   );
-  const lease = new ModelFileLease(descriptor);
+  const lease = new ModelFileLease(descriptor, signal);
+  if (signal?.aborted) {
+    await lease.release();
+    throw new ModelCommonsError('USER_CANCELLED', 'Shared model acquisition cancelled.');
+  }
   const expectedCoordination = descriptor.resourceKind === 'android-file-descriptor' ? 2 : 1;
   if (descriptor.coordinationVersion !== expectedCoordination) {
     await lease.release();

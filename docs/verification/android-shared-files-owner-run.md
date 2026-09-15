@@ -2,6 +2,9 @@
 
 Status: **implementation handoff; physical two-app acceptance not yet run**.
 
+For Windows emulator setup, exact local Expo build/install commands, package
+refresh and APK checks, start with the [local Android quick start](android-local-expo-quickstart.md).
+
 This procedure verifies that Sales & Pricing Mobile performs real offline
 inference from the GGUF already installed in ModelCommons. It must use two
 distinct Android application UIDs. Mocked reads, same-process tests, metadata
@@ -28,12 +31,17 @@ Expected source-contract results include:
 - descriptor resources survive native store, verified store, embedded runtime,
   and `llama.rn` wrappers;
 - the pinned `modelcommons-android-fd-v2` patch applies once and is idempotent;
-- a missing patch fails before a descriptor is borrowed;
+- a missing JS patch or loaded JNI/core handshake fails before a descriptor is borrowed;
+- provider validation uses actual SDK read/write permissions and URI grants;
+- cancelling verification interrupts the native read without closing an active FD;
 - context release precedes lease release.
 
 The descriptor patch targets exactly `llama.rn` 0.12.9. Both app config plugins
 set `rnllamaBuildFromSource=true`; inspect both Android build logs for
-`RNLLAMA_BUILD_FROM_SOURCE=ON`. The patch changes the JSI wrapper and matching
+`RNLLAMA_BUILD_FROM_SOURCE=ON` (CMake reports `Building rnllama libraries from source`).
+SPM enables this for both UVA and customer variants, including private-only
+builds, because its install hook patches the common dependency for every variant.
+The patch changes the JSI wrapper and matching
 common C++ parameter ABI together, so a patched wrapper linked to an unpatched
 prebuilt core cannot satisfy this acceptance.
 
@@ -47,7 +55,13 @@ Set-Location 'D:\GitHub\ModelCommons'
 npm run packages:pack-local -- "D:\GitHub\spm\vendor\modelcommons"
 
 Set-Location 'D:\GitHub\spm'
-npm install
+$localPackages = @((Get-Content .\package.json -Raw | ConvertFrom-Json).dependencies.PSObject.Properties |
+  Where-Object { $_.Name.StartsWith('@modelcommons/') } |
+  ForEach-Object { "$($_.Name)@$($_.Value)" })
+npm.cmd install --package-lock-only --force @localPackages
+npm.cmd ci
+npm.cmd run eas-build-post-install
+node 'D:\GitHub\ModelCommons\scripts\verify-local-consumer.cjs' 'D:\GitHub\spm'
 npm run config:validate
 npm run config:validate:uva:production
 npm test
@@ -65,6 +79,10 @@ agree on these changed package versions:
 
 The other packed protocol/client/profile/provider packages remain `0.1.0`.
 Never edit a TGZ or its integrity entry manually.
+Stop at the first failed command. The [quick start](android-local-expo-quickstart.md)
+includes explicit PowerShell failure guards. Repacking the same version requires
+refreshing its lockfile integrity and installed payload, even after a previous
+successful `npm install`.
 
 ## 3. Inspect generated native configuration
 
@@ -97,6 +115,46 @@ Use production profiles only when performing a production-signer acceptance.
 An AAB is suitable for Play distribution but cannot be installed directly with
 `adb`; use the preview APK profiles for direct device installation. Prefer a
 normal signed upgrade of ModelCommons so its installed model remains intact.
+
+For a fully local Windows build, first regenerate each existing Android project
+from the current Expo config without deleting it. This is required after changing
+the ModelCommons config plugin; building a previously generated `android/`
+directory can silently retain the old service/provider flags or omit
+`rnllamaBuildFromSource=true`.
+
+```powershell
+Set-Location 'D:\GitHub\ModelCommons'
+npx expo prebuild --platform android --no-install
+npm run android:prepare-native
+Push-Location '.\android'
+.\gradlew.bat :app:assembleRelease --no-daemon
+Pop-Location
+
+Set-Location 'D:\GitHub\spm'
+$env:APP_VARIANT = 'uva'
+$env:APP_ENV = 'preview'
+npx expo prebuild --platform android --no-install
+npm run eas-build-post-install
+Push-Location '.\android'
+.\gradlew.bat :app:assembleRelease --no-daemon
+Pop-Location
+```
+
+Both checked-in/generated release build types currently use the local debug
+keystore, so these APKs are suitable for local acceptance only. Before installing,
+confirm the device is visible, then install the two outputs:
+
+```powershell
+adb devices
+adb install -r 'D:\GitHub\ModelCommons\android\app\build\outputs\apk\release\app-release.apk'
+adb install -r 'D:\GitHub\spm\android\app\build\outputs\apk\release\app-release.apk'
+```
+
+Android rejects an update signed by a different certificate. Do not uninstall an
+existing ModelCommons installation merely to bypass that check if its downloaded
+model or other app data must be preserved. In that case, use matching EAS signing
+credentials or a separate test device/profile. A release APK bundles JavaScript
+and can perform the airplane-mode acceptance without Metro or `adb reverse`.
 
 ## 4. Record the fixture
 
@@ -152,7 +210,8 @@ not commit the generated device records.
    `storageOwner=shared-store`, `executionOwner=application`,
    `centralizedInference=false`, `runtimeId=llama.rn`,
    `runtimeVersion=0.12.9`, `nativeSharedAcquisition=true`,
-   `modelLocationKind=native-file-descriptor`, the expected model/revision/hash,
+   `modelLocationKind=native-file-descriptor`, `nativeDescriptorHandshakeVersion=1`,
+   the expected model/revision/hash,
    and `cleanup=released`.
 7. Confirm the consumer's private/cache inspection and attempt counters remain
    unchanged. A small native grant record is expected; a second GGUF is not.
@@ -163,9 +222,14 @@ not commit the generated device records.
    a separate case.
 10. Cancel during verification, load, and generation. Change mode/account during
     a pending selection. Verify stale results are suppressed and candidate grants
-    are released.
+    are released only when created by that attempt. Repeating a same-folder
+    selection or reusing another native grant must not revoke the existing grant
+    on validation failure or cancellation.
 11. Revoke the tree grant and require a clear reconnect failure with no private
-    download or cloud fallback. Reconnect explicitly.
+    download or cloud fallback. Reconnect explicitly. Repeat recovery from a
+    persisted `android-binder:` ID and from a missing native record. Retired or
+    absent IDs must not roll back a valid new connection; active lease or real
+    OS grant-cleanup errors must still surface.
 12. Exercise owner-side delete/update while a consumer context is active, then
     repeat acquisition. Require no crash, no mutated mapped revision, and a clear
     later not-ready result.

@@ -6,6 +6,17 @@
   "upstreamBuild": "b10256",
   "upstreamCommitLabel": "6c8dcaa",
   "identity": "npm archive plus patched source SHA-256 inventory (not an unmodified upstream checkout)",
+  "modelCommonsPatch": {
+    "id": "modelcommons-android-fd-v2",
+    "nativeHandshakeVersion": 1,
+    "script": "modules/model-commons-native/scripts/patch-llama-rn-android-fd.cjs",
+    "acceptedPatchedFiles": {
+      "common/common.h": "cd6b8b1133ac28080d0f6ba05616f10223125894db8e208f5553fb04e41ffc6c",
+      "common/common.cpp": "c56fa5480100551dec93806a37a7f81b1f877106ac809d7110cb8b7d196b7b01",
+      "jsi/JSIParams.cpp": "e9cfe1d7db5bd1859623b9d785a7d88f1048cb6aa7b3e561dc6d0c13e7475877",
+      "jsi/RNLlamaJSI.cpp": "c8b796539fa7e9ecaec4fe4ee164356ce297532b924481df856d3a06a5f28adf"
+    }
+  },
   "files": {
     "anyascii.c": "79900a045802d2bf4ff4c1e4f64dff5baefecc96d3fc2a28c452e19bba79cbf5",
     "anyascii.h": "0b4fe4cd6c064bfe27651fd2f3a8b22f470210f990a63fa35443b042ab99274b",

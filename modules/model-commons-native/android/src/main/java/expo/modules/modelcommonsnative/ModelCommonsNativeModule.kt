@@ -141,6 +141,9 @@ class ModelCommonsNativeModule : Module() {
     AsyncFunction("sha256Lease") { leaseId: String -> sharedFiles.sha256(leaseId) }
       .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
 
+    // Synchronous flag only: never waits on the hash queue or closes its descriptor.
+    Function("cancelLeaseVerification") { leaseId: String -> sharedFiles.cancelVerification(leaseId) }
+
     AsyncFunction("readLeaseMetadata") { leaseId: String -> sharedFiles.readMetadata(leaseId) }
       .runOnQueue(expo.modules.kotlin.functions.Queues.DEFAULT)
 

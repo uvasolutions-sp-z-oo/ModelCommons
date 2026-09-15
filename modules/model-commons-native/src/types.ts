@@ -22,6 +22,8 @@ export interface NativeDeviceProfile {
 
 export interface SharedDirectoryConnection {
   id: string;
+  /** Returned by Android connect only: whether this attempt created the record. */
+  created?: boolean;
   kind: 'security-scoped' | 'app-group' | 'android-shared-files';
   displayName: string;
   groupIdentifier?: string;
@@ -107,6 +109,7 @@ export interface AndroidHubModelSnapshot {
 }
 
 export interface ModelCommonsNativeModuleShape {
+  cancelLeaseVerification?(leaseId: string): void;
   ownerAppGroupRoot?(): Promise<string>;
   privateModelEvidence?(): Promise<{ downloadAttempts: number; importAttempts: number; artifactCount: number; artifactBytes: number }>;
   privateModelOperation?(operation: string, path: string, value: string): Promise<unknown>;

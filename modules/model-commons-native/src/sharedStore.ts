@@ -8,10 +8,11 @@ import { callNative } from './nativeError';
 export function createSharedStorePort(
   connectionId: string,
   onAcquire?: () => void,
-  connectionKind: 'security-scoped' | 'app-group' | 'android-shared-files' = 'security-scoped'
+  connectionKind: 'security-scoped' | 'app-group' | 'android-shared-files' = 'security-scoped',
+  signal?: AbortSignal
 ): ReadStorePort {
   if (!connectionId) throw new ModelCommonsError('PERMISSION_REQUIRED', 'Choose a shared model directory first.');
-  const acquire = (path: string) => acquireModelLease(connectionId, assertSafeRelativePath(path));
+  const acquire = (path: string) => acquireModelLease(connectionId, assertSafeRelativePath(path), signal);
   async function read<T>(path: string, operation: (leaseId: string) => Promise<T>): Promise<T> {
     const lease = await acquire(path);
     try {

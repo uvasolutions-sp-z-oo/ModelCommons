@@ -2,6 +2,9 @@ import type { ModelCommonsRequest, ModelCommonsStreamEvent, RuntimeProfile } fro
 import { describe, expect, it, vi } from 'vitest';
 import { createLlamaRnRuntime } from '../runtime';
 
+const nativeDescriptorSupport = () => Promise.resolve({ version: 2, nativeHandshakeVersion: 1,
+  buildId: 'modelcommons-android-fd-v2', ownership: 'runtime-validates-and-duplicates-descriptor' });
+
 const profile: RuntimeProfile = {
   schema: 'modelcommons.runtime-profile',
   schemaVersion: 1,
@@ -28,6 +31,31 @@ const request: ModelCommonsRequest = {
 };
 
 describe('LlamaRnRuntime lifecycle', () => {
+  it.each(['missing', 'wrong-version', 'wrong-core', 'native-error', 'abi-mismatch'])('rejects a JS-only marker with %s native handshake before borrowing a descriptor', async (scenario) => {
+    const release = vi.fn(async () => undefined);
+    const openDescriptor = vi.fn();
+    const initLlama = vi.fn();
+    const runtime = createLlamaRnRuntime({ loadModule: async () => ({
+      ModelCommonsDescriptorSupport: { version: 2, ownership: 'runtime-validates-and-duplicates-descriptor' },
+      getModelCommonsDescriptorSupport: scenario === 'missing' ? undefined : async () => {
+        if (scenario === 'native-error') throw new Error('dlopen failed: /private/native-library');
+        if (scenario === 'abi-mismatch') throw new Error('ModelCommons native descriptor ABI mismatch');
+        return { ...await nativeDescriptorSupport(),
+          ...(scenario === 'wrong-version' ? { nativeHandshakeVersion: 0 } : { buildId: 'old-core' }) };
+      },
+      initLlama,
+    } as never) });
+    await expect(runtime.createSession({ model: { id: 'shared',
+      uri: 'modelcommons-native://android-file-descriptor', lease: {
+        id: 'lease', uri: 'modelcommons-native://android-file-descriptor', release,
+        resource: { kind: 'android-file-descriptor', descriptorVersion: 2, openDescriptor },
+      } }, profile })).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE',
+      details: { initFailureKind: 'NATIVE_BINDING_UNAVAILABLE' } });
+    expect(openDescriptor).not.toHaveBeenCalled();
+    expect(initLlama).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it('requires descriptor-capable native bindings before borrowing an Android model descriptor', async () => {
     const openDescriptor = vi.fn(async () => ({
       kind: 'android-file-descriptor' as const, descriptorVersion: 2 as const,
@@ -72,6 +100,7 @@ describe('LlamaRnRuntime lifecycle', () => {
     const runtime = createLlamaRnRuntime({
       loadModule: async () => ({
         ModelCommonsDescriptorSupport: { version: 2, ownership: 'runtime-validates-and-duplicates-descriptor' },
+        getModelCommonsDescriptorSupport: nativeDescriptorSupport,
         initLlama,
       } as never),
     });
@@ -104,6 +133,7 @@ describe('LlamaRnRuntime lifecycle', () => {
     const runtime = createLlamaRnRuntime({
       loadModule: async () => ({
         ModelCommonsDescriptorSupport: { version: 2, ownership: 'runtime-validates-and-duplicates-descriptor' },
+        getModelCommonsDescriptorSupport: nativeDescriptorSupport,
         initLlama,
       } as never),
     });
@@ -128,6 +158,7 @@ describe('LlamaRnRuntime lifecycle', () => {
     const runtime = createLlamaRnRuntime({
       loadModule: async () => ({
         ModelCommonsDescriptorSupport: { version: 2, ownership: 'runtime-validates-and-duplicates-descriptor' },
+        getModelCommonsDescriptorSupport: nativeDescriptorSupport,
         initLlama,
       } as never),
     });

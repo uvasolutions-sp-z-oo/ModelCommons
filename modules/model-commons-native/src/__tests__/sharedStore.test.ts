@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const native = vi.hoisted(() => ({
   acquireModelLease: vi.fn(), releaseModelLease: vi.fn(), readLeaseMetadata: vi.fn(),
   statLease: vi.fn(), sha256Lease: vi.fn(), prepareLeaseForRuntime: vi.fn(),
+  cancelLeaseVerification: vi.fn(),
 }));
 vi.mock('../nativeModule', () => ({ default: native }));
 import { createSharedStorePort } from '../sharedStore';
@@ -16,6 +17,30 @@ beforeEach(() => {
     kind: 'android-file-descriptor', descriptor: 41, descriptorVersion: 2,
     device: '12', inode: '34', size: '56',
   });
+});
+it('cancels Android hashing without releasing the descriptor while the native read is still running', async () => {
+  const abort = new AbortController();
+  native.acquireModelLease.mockResolvedValue({ id: 'hash-lease', connectionId: 'connection',
+    uri: 'modelcommons-native://android-file-descriptor', resourceKind: 'android-file-descriptor', coordinationVersion: 2 });
+  let finish!: (hash: string) => void;
+  native.sha256Lease.mockImplementation(() => new Promise<string>((resolve) => { finish = resolve; }));
+  const port = createSharedStorePort('connection', undefined, 'android-shared-files', abort.signal);
+  const lease = await port.acquire('model.gguf');
+  const hashing = lease.sha256!();
+  const rejected = expect(hashing).rejects.toMatchObject({ code: 'USER_CANCELLED' });
+  abort.abort();
+  expect(native.cancelLeaseVerification).toHaveBeenCalledWith('hash-lease');
+  expect(native.releaseModelLease).not.toHaveBeenCalled();
+  finish('a'.repeat(64));
+  await rejected;
+  await lease.release();
+  expect(native.releaseModelLease).toHaveBeenCalledOnce();
+});
+it('does not start acquisition after cancellation', async () => {
+  const abort = new AbortController(); abort.abort();
+  await expect(createSharedStorePort('connection', undefined, 'android-shared-files', abort.signal)
+    .acquire('model.gguf')).rejects.toMatchObject({ code: 'USER_CANCELLED' });
+  expect(native.acquireModelLease).not.toHaveBeenCalled();
 });
 it('preserves Android shared identity and exposes only a validated native descriptor resource', async () => {
   native.acquireModelLease.mockResolvedValue({

@@ -2,6 +2,7 @@ package expo.modules.modelcommonsnative.storage
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ProviderInfo
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
@@ -17,6 +18,8 @@ import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Consumer-side persisted SAF grants and read-only descriptor leases. */
 class AndroidSharedModelFiles(private val context: Context) {
@@ -38,6 +41,8 @@ class AndroidSharedModelFiles(private val context: Context) {
 
   private val lock = Any()
   private val leases = linkedMapOf<String, Lease>()
+  // Cancellation cannot take the descriptor lock held by the hashing loop.
+  private val verificationCancellation = ConcurrentHashMap<String, AtomicBoolean>()
   private val recordsFile = File(context.noBackupFilesDir, CONNECTIONS_FILE)
 
   fun connect(treeUri: Uri, resultFlags: Int): Map<String, Any> = synchronized(lock) {
@@ -57,9 +62,7 @@ class AndroidSharedModelFiles(private val context: Context) {
     }
     val provider = context.packageManager.resolveContentProvider(authority, 0)
       ?: throw IllegalStateException("HUB_NOT_FOUND: The selected ModelCommons provider is unavailable.")
-    require(provider.exported && provider.permission == "android.permission.MANAGE_DOCUMENTS") {
-      "PERMISSION_REQUIRED: The selected provider does not implement the restricted ModelCommons contract."
-    }
+    requireRestrictedProvider(provider)
     val signers = CallerAuthorizer(context).signingFingerprints(provider.packageName)
     require(signers.isNotEmpty() && signers.size <= 8) {
       "PERMISSION_REQUIRED: The selected provider signing identity is unavailable."
@@ -76,16 +79,16 @@ class AndroidSharedModelFiles(private val context: Context) {
           && existing.signerSha256.toSet().intersect(signers.toSet()).isNotEmpty()) {
           "PERMISSION_REQUIRED: The selected provider identity changed; disconnect and authorize it again."
         }
-        return@synchronized existing.dictionary()
+        return@synchronized existing.dictionary() + ("created" to false)
       }
       val connection = Connection(UUID.randomUUID().toString(), uriText, authority, provider.packageName, signers.sorted())
       val records = readConnections().toMutableList()
       require(records.size < MAX_CONNECTIONS) { "STORAGE_UNAVAILABLE: Shared connection capacity reached." }
       records += connection
       persist(records)
-      connection.dictionary()
+      connection.dictionary() + ("created" to true)
     } catch (error: Exception) {
-      if (!hadGrant && readConnections().none { it.treeUri == uriText }) {
+      if (!hadGrant) {
         runCatching { context.contentResolver.releasePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
       }
       throw error
@@ -107,11 +110,12 @@ class AndroidSharedModelFiles(private val context: Context) {
 
   fun disconnect(connectionId: String) = synchronized(lock) {
     val records = readConnections()
-    val connection = records.firstOrNull { it.id == connectionId }
-      ?: throw IllegalArgumentException("PERMISSION_REQUIRED: Shared model connection is unknown.")
     require(leases.values.none { it.connectionId == connectionId }) {
       "RUNTIME_UNAVAILABLE: Release model leases before disconnecting shared storage."
     }
+    // A revoked grant may have been reconciled out while JS still held its ID.
+    // Live leases above still block cleanup even when the record is absent.
+    val connection = records.firstOrNull { it.id == connectionId } ?: return@synchronized
     val remaining = records.filterNot { it.id == connectionId }
     if (remaining.none { it.treeUri == connection.treeUri }) {
       val uri = Uri.parse(connection.treeUri)
@@ -136,6 +140,7 @@ class AndroidSharedModelFiles(private val context: Context) {
       validateDescriptor(descriptor)
       val id = UUID.randomUUID().toString()
       leases[id] = Lease(id, connectionId, descriptor)
+      verificationCancellation[id] = AtomicBoolean(false)
       mapOf(
         "id" to id,
         "connectionId" to connectionId,
@@ -151,6 +156,7 @@ class AndroidSharedModelFiles(private val context: Context) {
 
   fun release(leaseId: String) = synchronized(lock) {
     val lease = leases.remove(leaseId) ?: return@synchronized
+    verificationCancellation.remove(leaseId)
     lease.bridgeDescriptor?.close()
     lease.descriptor.close()
   }
@@ -163,21 +169,12 @@ class AndroidSharedModelFiles(private val context: Context) {
 
   fun sha256(leaseId: String): String = synchronized(lock) {
     val lease = requireLease(leaseId)
-    val stat = Os.fstat(lease.descriptor.fileDescriptor)
-    require(OsConstants.S_ISREG(stat.st_mode) && stat.st_size > 0) {
-      "INTEGRITY_FAILED: Shared artifact is not a regular file."
-    }
-    val digest = MessageDigest.getInstance("SHA-256")
-    val buffer = ByteArray(1024 * 1024)
-    var offset = 0L
-    while (offset < stat.st_size) {
-      val wanted = minOf(buffer.size.toLong(), stat.st_size - offset).toInt()
-      val count = Os.pread(lease.descriptor.fileDescriptor, buffer, 0, wanted, offset)
-      require(count > 0) { "INTEGRITY_FAILED: Shared artifact ended before its reported size." }
-      digest.update(buffer, 0, count)
-      offset += count
-    }
-    digest.digest().joinToString("") { "%02x".format(it) }
+    val cancelled = requireNotNull(verificationCancellation[leaseId])
+    hashDescriptor(lease.descriptor) { cancelled.get() }
+  }
+
+  fun cancelVerification(leaseId: String) {
+    verificationCancellation[leaseId]?.set(true)
   }
 
   fun readMetadata(leaseId: String): String = synchronized(lock) {
@@ -232,12 +229,16 @@ class AndroidSharedModelFiles(private val context: Context) {
     }
   }
 
-  fun closeAll() = synchronized(lock) {
-    leases.values.forEach {
-      runCatching { it.bridgeDescriptor?.close() }
-      runCatching { it.descriptor.close() }
+  fun closeAll() {
+    verificationCancellation.values.forEach { it.set(true) }
+    synchronized(lock) {
+      leases.values.forEach {
+        runCatching { it.bridgeDescriptor?.close() }
+        runCatching { it.descriptor.close() }
+      }
+      leases.clear()
+      verificationCancellation.clear()
     }
-    leases.clear()
   }
 
   private fun validateConnection(treeUri: Uri) {
@@ -284,8 +285,8 @@ class AndroidSharedModelFiles(private val context: Context) {
     require(hasReadGrant(treeUri)) { "PERMISSION_REQUIRED: Shared model access was revoked; reconnect storage." }
     val provider = context.packageManager.resolveContentProvider(connection.authority, 0)
       ?: throw IllegalStateException("HUB_NOT_FOUND: The ModelCommons provider is unavailable.")
-    require(provider.packageName == connection.providerPackage && provider.exported
-      && provider.permission == "android.permission.MANAGE_DOCUMENTS") {
+    requireRestrictedProvider(provider)
+    require(provider.packageName == connection.providerPackage) {
       "PERMISSION_REQUIRED: The ModelCommons provider contract changed; reconnect storage."
     }
     val currentSigners = CallerAuthorizer(context).signingFingerprints(provider.packageName)
@@ -439,6 +440,37 @@ class AndroidSharedModelFiles(private val context: Context) {
   }
 
   companion object {
+    internal fun hashDescriptor(descriptor: ParcelFileDescriptor, cancelled: () -> Boolean): String {
+      fun checkCancelled() {
+        require(!cancelled()) { "USER_CANCELLED: Shared model verification cancelled." }
+      }
+      checkCancelled()
+      val stat = Os.fstat(descriptor.fileDescriptor)
+      require(OsConstants.S_ISREG(stat.st_mode) && stat.st_size > 0) {
+        "INTEGRITY_FAILED: Shared artifact is not a regular file."
+      }
+      val digest = MessageDigest.getInstance("SHA-256")
+      val buffer = ByteArray(1024 * 1024)
+      var offset = 0L
+      while (offset < stat.st_size) {
+        checkCancelled()
+        val wanted = minOf(buffer.size.toLong(), stat.st_size - offset).toInt()
+        val count = Os.pread(descriptor.fileDescriptor, buffer, 0, wanted, offset)
+        require(count > 0) { "INTEGRITY_FAILED: Shared artifact ended before its reported size." }
+        digest.update(buffer, 0, count)
+        offset += count
+      }
+      checkCancelled()
+      return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    internal fun requireRestrictedProvider(provider: ProviderInfo) {
+      val permission = "android.permission.MANAGE_DOCUMENTS"
+      require(provider.enabled && provider.exported && provider.grantUriPermissions
+        && provider.readPermission == permission && provider.writePermission == permission) {
+        "PERMISSION_REQUIRED: The selected provider does not implement the restricted ModelCommons contract."
+      }
+    }
     private const val CONNECTIONS_FILE = "modelcommons-shared-connections-v1.json"
     private const val AUTHORITY_SUFFIX = ".modelcommons.documents"
     private const val NATIVE_DESCRIPTOR_URI = "modelcommons-native://android-file-descriptor"

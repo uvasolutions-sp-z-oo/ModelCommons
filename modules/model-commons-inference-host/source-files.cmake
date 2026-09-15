@@ -1,4 +1,6 @@
 # Generated from authorized reads of llama.rn 0.12.9; see source-pin.json.
+# Four reviewed alternate hashes cover the Android FD v2 patch with native handshake 1.
+# They do not relax the file inventory or the hashes of any other upstream source.
 file(GLOB_RECURSE ACTUAL RELATIVE "${SRC}" "${SRC}/*")
 set(EXPECTED
   "anyascii.c"
@@ -747,11 +749,13 @@ if(NOT DIGEST STREQUAL "d58471e45e5bfc73fbc31dfdd5812a5f28889431087e6dbfef40f76e
   message(FATAL_ERROR "Pinned llama source mismatch: common/chat.h")
 endif()
 file(SHA256 "${SRC}/common/common.cpp" DIGEST)
-if(NOT DIGEST STREQUAL "a5ea14a4351cf60efda3ab154e34ad02bd0d8976e88517ae6a5b2734fca6d49f")
+if(NOT DIGEST STREQUAL "a5ea14a4351cf60efda3ab154e34ad02bd0d8976e88517ae6a5b2734fca6d49f"
+   AND NOT DIGEST STREQUAL "c56fa5480100551dec93806a37a7f81b1f877106ac809d7110cb8b7d196b7b01")
   message(FATAL_ERROR "Pinned llama source mismatch: common/common.cpp")
 endif()
 file(SHA256 "${SRC}/common/common.h" DIGEST)
-if(NOT DIGEST STREQUAL "4c7c0355737c86765001c46704250b61dce544639d8e41a94bf7a26db4c477be")
+if(NOT DIGEST STREQUAL "4c7c0355737c86765001c46704250b61dce544639d8e41a94bf7a26db4c477be"
+   AND NOT DIGEST STREQUAL "cd6b8b1133ac28080d0f6ba05616f10223125894db8e208f5553fb04e41ffc6c")
   message(FATAL_ERROR "Pinned llama source mismatch: common/common.h")
 endif()
 file(SHA256 "${SRC}/common/fit.cpp" DIGEST)
@@ -2283,7 +2287,8 @@ if(NOT DIGEST STREQUAL "b36dcca15cd3e2d9d4824188ff18f575f46643c29f0c76e728564d3e
   message(FATAL_ERROR "Pinned llama source mismatch: jsi/JSINativeHeaders.h")
 endif()
 file(SHA256 "${SRC}/jsi/JSIParams.cpp" DIGEST)
-if(NOT DIGEST STREQUAL "750e34c98ed0ce21b6f8969f84e721b1bcee424e6de7ce030483288b0e43ba89")
+if(NOT DIGEST STREQUAL "750e34c98ed0ce21b6f8969f84e721b1bcee424e6de7ce030483288b0e43ba89"
+   AND NOT DIGEST STREQUAL "e9cfe1d7db5bd1859623b9d785a7d88f1048cb6aa7b3e561dc6d0c13e7475877")
   message(FATAL_ERROR "Pinned llama source mismatch: jsi/JSIParams.cpp")
 endif()
 file(SHA256 "${SRC}/jsi/JSIParams.h" DIGEST)
@@ -2315,7 +2320,8 @@ if(NOT DIGEST STREQUAL "126e8d28cae4b150e0e9665295139520931ae899e1601d3270aecefc
   message(FATAL_ERROR "Pinned llama source mismatch: jsi/JSIUtils.h")
 endif()
 file(SHA256 "${SRC}/jsi/RNLlamaJSI.cpp" DIGEST)
-if(NOT DIGEST STREQUAL "c02583fcb0c08e3f6c69a144e54ad14a392ca9b4a65d71f35d8ff16b66ccc3e7")
+if(NOT DIGEST STREQUAL "c02583fcb0c08e3f6c69a144e54ad14a392ca9b4a65d71f35d8ff16b66ccc3e7"
+   AND NOT DIGEST STREQUAL "c8b796539fa7e9ecaec4fe4ee164356ce297532b924481df856d3a06a5f28adf")
   message(FATAL_ERROR "Pinned llama source mismatch: jsi/RNLlamaJSI.cpp")
 endif()
 file(SHA256 "${SRC}/jsi/RNLlamaJSI.h" DIGEST)

@@ -66,6 +66,18 @@ await session.release();
 
 Both platforms expose streaming SHA-256 hashing. iOS holds the corresponding lease/root lock for the complete read so security-scoped access cannot be stopped midway.
 
+On Android, `connectSharedDirectory()` adds an attempt-local `created` flag:
+`false` means it reused a native connection. Cancellation or failed validation
+must not disconnect that existing connection. Android disconnect is idempotent
+for an absent record but still rejects a live lease before checking records.
+
+The optional fourth argument to `createSharedStorePort(connectionId, onAcquire,
+connectionKind, signal)` forwards an `AbortSignal` to model acquisition and
+verification. Android hashing checks a cancellation flag between bounded reads;
+it retains the descriptor lock until the read has stopped. Callers await that
+settlement before releasing the lease. Aborting does not close an FD underneath
+an active read. iOS retains its existing coordinated-read lifetime.
+
 ## Atomic publication
 
 The exact JavaScript API is:

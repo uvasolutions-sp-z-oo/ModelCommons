@@ -18,8 +18,11 @@ Capabilities are read from the loaded context (`gpu`, `reasonNoGPU`, `devices`, 
 Cancellation is native: once a request owns the serialized inference lane, abort/cancel invokes `context.stopCompletion()`. Aborting a queued request never stops a different session's active completion. Ending async iteration early also aborts the associated native request.
 
 For shared storage, pass the lease returned by `@modelcommons/native` as the
-model lease. On Android the runtime checks the patched 0.12.9 capability before
-borrowing the native-owned descriptor. The patch synchronously validates and
+model lease. On Android the runtime checks the patched 0.12.9 capability and
+queries the loaded JNI wrapper before borrowing the native-owned descriptor.
+The wrapper must expose native handshake version 1 and link to the matching
+patched core, whose parameter-layout size is checked at runtime. A JavaScript
+patch marker alone cannot authorize descriptor loading. The patch validates and
 duplicates a read-only, regular, non-empty, seekable descriptor and its recorded
 device/inode/size identity before background initialization, loads through
 `llama_model_load_from_file_ptr`, and retains its `FILE*` until after model and
