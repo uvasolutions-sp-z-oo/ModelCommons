@@ -40,4 +40,12 @@ for (const [relative, needle] of [
 ]) {
   assert.ok(fs.readFileSync(path.join(root, relative), 'utf8').includes(needle), `Stale installed source: ${relative}`);
 }
+// A matching version does not establish freshness when local archives are repacked.
+const sharedFiles = 'android/src/main/java/expo/modules/modelcommonsnative/storage/AndroidSharedModelFiles.kt';
+const normalizedSource = (file) => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+assert.equal(
+  normalizedSource(path.join(root, 'node_modules/@modelcommons/native', sharedFiles)),
+  normalizedSource(path.join(__dirname, '../modules/model-commons-native', sharedFiles)),
+  'Installed Android connector differs from this ModelCommons checkout; repack and reinstall before building'
+);
 console.log('All nine archives, provenance records, lockfile entries, installed versions and required hooks agree. Native build/device acceptance is still required.');

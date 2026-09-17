@@ -7,6 +7,10 @@ cannot load these native modules, and no EAS cloud build is needed.
 Status: source changes prepared; the commands and device acceptance below still
 need an owner run. Do not treat a successful package check as Android proof.
 
+If you hit the September 17 Kotlin/Metaspace failure, use the
+[focused recovery procedure](android-build-recovery.md). It checks Kotlin/KSP
+first and preserves the existing dependency build caches during package refresh.
+
 ## 1. Start the emulator
 
 Install the Android SDK/build tools and the JDK required by the existing Expo 54
@@ -18,7 +22,14 @@ Ensure `java`, Node/npm and the SDK's `platform-tools` are on your PATH.
 adb devices
 $androidSerial = 'emulator-5554' # Replace with the serial listed as "device" above.
 $androidAbi = (adb -s $androidSerial shell getprop ro.product.cpu.abi).Trim()
-$androidAbi
+if ($LASTEXITCODE -ne 0 -or $androidAbi -notin @('x86_64', 'arm64-v8a')) {
+  throw 'Select a connected 64-bit Android device before building'
+}
+# Applies to Gradle launched by Expo in this PowerShell session.
+$env:GRADLE_OPTS = "$env:GRADLE_OPTS " +
+  '-Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8" ' +
+  '-Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false ' +
+  "-Dorg.gradle.project.reactNativeArchitectures=$androidAbi"
 ```
 
 An **x86_64 emulator** can exercise the ModelCommons document provider and SPM's
@@ -27,6 +38,12 @@ own llama.rn inference. ModelCommons' separate chat worker currently supports
 interpret its unavailable-runtime error there as failure of folder sharing.
 Use an ARM64 physical phone for the full two-app acceptance, including Hub chat
 and the original first-download 135M regression.
+
+The session options above raise the previously exhausted 512 MB Metaspace cap,
+limit Gradle concurrency and target this device's ABI. Expo release builds do
+not automatically select only the attached device's ABI. These JVM limits need
+room alongside the emulator and native compiler processes. They do not change
+the checked-in release/distribution architecture configuration.
 
 ## 2. Check and prepare ModelCommons
 
@@ -103,7 +120,12 @@ Set-Location 'D:\GitHub\ModelCommons'
 npx.cmd expo prebuild --platform android --no-install
 if ($LASTEXITCODE -ne 0) { throw 'ModelCommons prebuild failed' }
 Select-String -Path .\android\gradle.properties -Pattern '^rnllamaBuildFromSource=true$'
-npx.cmd expo run:android --device $androidSerial --variant release --no-bundler
+Push-Location '.\android'
+try {
+  .\gradlew.bat :modelcommons-native:compileReleaseKotlin --no-daemon --console=plain
+  if ($LASTEXITCODE -ne 0) { throw 'ModelCommons connector Kotlin compilation failed' }
+} finally { Pop-Location }
+npx.cmd expo run:android --device --variant release --no-bundler
 if ($LASTEXITCODE -ne 0) { throw 'ModelCommons local build/install failed' }
 ```
 
@@ -116,9 +138,18 @@ $env:APP_ENV = 'preview'
 npx.cmd expo prebuild --platform android --no-install
 if ($LASTEXITCODE -ne 0) { throw 'SPM prebuild failed' }
 Select-String -Path .\android\gradle.properties -Pattern '^rnllamaBuildFromSource=true$'
-npx.cmd expo run:android --device $androidSerial --variant release --no-bundler
+Push-Location '.\android'
+try {
+  .\gradlew.bat :modelcommons-native:compileReleaseKotlin :expo-updates:kspReleaseKotlin --no-daemon --console=plain
+  if ($LASTEXITCODE -ne 0) { throw 'SPM Kotlin/KSP compilation failed' }
+} finally { Pop-Location }
+npx.cmd expo run:android --device --variant release --no-bundler
 if ($LASTEXITCODE -ne 0) { throw 'SPM local build/install failed' }
 ```
+
+Select the same emulator at each Expo device prompt. In the installed CLI,
+`--device <value>` matches the device name, not the ADB serial used above. Bare
+`--device` opens the selector; omit it entirely to use Expo's default device.
 
 Both property inspections must show `rnllamaBuildFromSource=true`. The source
 build includes both the JNI wrapper and its matching core. The first native

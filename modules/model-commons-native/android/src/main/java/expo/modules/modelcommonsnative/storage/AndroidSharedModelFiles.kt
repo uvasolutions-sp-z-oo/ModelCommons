@@ -105,7 +105,7 @@ class AndroidSharedModelFiles(private val context: Context) {
         && DocumentsContract.isTreeUri(uri) && hasReadGrant(uri)
     }.getOrDefault(false) }
     if (granted.size != records.size) persist(granted)
-    granted.map(Connection::dictionary)
+    granted.map { it.dictionary() }
   }
 
   fun disconnect(connectionId: String) = synchronized(lock) {
