@@ -1,8 +1,18 @@
 {
   "name": "@modelcommons/model-store",
   "version": "0.2.0",
+  "private": true,
   "description": "Verified model storage with injected I/O and trust policy.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uvasolutions-sp-z-oo/ModelCommons.git",
+    "directory": "packages/model-store"
+  },
+  "homepage": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/tree/HEAD/packages/model-store",
+  "bugs": {
+    "url": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/issues"
+  },
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -11,7 +21,11 @@
     "./registry": "./src/registry.ts",
     "./catalog": "./src/catalog.ts"
   },
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "sideEffects": false,
-  "dependencies": { "@modelcommons/protocol": "0.1.0" }
+  "dependencies": {
+    "@modelcommons/protocol": "0.1.0"
+  }
 }

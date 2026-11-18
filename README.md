@@ -55,7 +55,7 @@ storage connector; existing apps do not gain sharing automatically.
 | Android SAF shared files | Implemented with consumer-owned descriptor inference; two-app device verification pending |
 | Android centralized inference over Binder | Retained as an explicit experimental path; normal consumers do not use it |
 | Canonical client, model store, runtime and provider adapters | Implemented and covered by local contract tests; supported subsets vary |
-| npm distribution | Local package build/packing available; no public npm release claimed |
+| npm distribution | Nine local archives and a four-package npm preview candidate. See the [release readiness and owner handoff](docs/NPM-RELEASE-READINESS.md). |
 | Web | Protocol/client code is reusable; native inference reports unavailable |
 
 Android now follows the same ownership model as iOS: ModelCommons owns storage,

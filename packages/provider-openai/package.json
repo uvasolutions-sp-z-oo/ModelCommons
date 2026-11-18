@@ -1,8 +1,18 @@
 {
   "name": "@modelcommons/provider-openai",
   "version": "0.1.0",
+  "private": true,
   "description": "Offline OpenAI wire adapter for ModelCommons.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uvasolutions-sp-z-oo/ModelCommons.git",
+    "directory": "packages/provider-openai"
+  },
+  "homepage": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/tree/HEAD/packages/provider-openai",
+  "bugs": {
+    "url": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/issues"
+  },
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

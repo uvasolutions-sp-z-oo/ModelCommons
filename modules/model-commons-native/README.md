@@ -2,7 +2,7 @@
 
 Optional Expo Modules API bridge for ModelCommons on Expo SDK 54 / React Native 0.81. It is safe to import on web: the platform resolver loads a null native module and `getNativeAvailability()` reports that native support is absent.
 
-The owner-verified [iOS Files milestone](../../docs/verification/ios-shared-models.md)
+The owner-verified [iOS Files milestone](https://github.com/uvasolutions-sp-z-oo/ModelCommons/blob/HEAD/docs/verification/ios-shared-models.md)
 uses this connector on a physical iPhone SE. Android SAF shared files are
 implemented in `0.2.0`; physical two-app acceptance remains owner-run.
 
@@ -94,7 +94,7 @@ Both files must be distinct siblings in app-owned storage (or, on iOS, an active
 
 Unknown clients are recorded as pending after a rejected call. The Hub UI can inspect `listPendingAndroidClients()` and call `setAndroidClientAuthorization(...)`. Requests are capped at 48 KiB, events and model pages at 16/48 KiB, sessions are UID-owned, callback Binder death cancels work, and client teardown releases sessions.
 
-The optional `@modelcommons/inference-host` now supplies a service-owned CPU worker built from pinned source into an isolated JNI library. It is not a dependency of this connector. Without that package/library, capabilities remain unavailable. With it, centralized inference is implemented in source; the native CPU host has compiled and linked locally, while signed two-app device verification remains pending. Availability does not establish successful model loading or inference. See the [owner-run build, trust, packaging and physical acceptance guide](../../docs/verification/android-binder-inference-owner-run.md).
+The optional `@modelcommons/inference-host` now supplies a service-owned CPU worker built from pinned source into an isolated JNI library. It is not a dependency of this connector. Without that package/library, capabilities remain unavailable. With it, centralized inference is implemented in source; the native CPU host has compiled and linked locally, while signed two-app device verification remains pending. Availability does not establish successful model loading or inference. See the [owner-run build, trust, packaging and physical acceptance guide](https://github.com/uvasolutions-sp-z-oo/ModelCommons/blob/HEAD/docs/verification/android-binder-inference-owner-run.md).
 
 `createAndroidBinderTransport({ packageName, trustedCertificateSha256 })` remains
 available for an explicitly enabled experimental integration. It is not the

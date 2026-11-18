@@ -1,8 +1,18 @@
 {
   "name": "@modelcommons/provider-anthropic",
   "version": "0.1.0",
+  "private": true,
   "description": "Offline Anthropic Messages wire adapter for ModelCommons.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uvasolutions-sp-z-oo/ModelCommons.git",
+    "directory": "packages/provider-anthropic"
+  },
+  "homepage": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/tree/HEAD/packages/provider-anthropic",
+  "bugs": {
+    "url": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/issues"
+  },
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

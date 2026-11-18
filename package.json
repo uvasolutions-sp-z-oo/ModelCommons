@@ -25,7 +25,9 @@
     "test": "vitest run",
     "prebuild": "expo prebuild",
     "prebuild:clean": "expo prebuild --clean",
-    "sbom": "node -e \"require('fs').mkdirSync('compliance/sbom',{recursive:true})\" && npx --yes @cyclonedx/cyclonedx-npm@5.0.0 --output-format JSON --output-file compliance/sbom/modelcommons.cdx.json"
+    "sbom": "node -e \"require('fs').mkdirSync('compliance/sbom',{recursive:true})\" && npx --yes @cyclonedx/cyclonedx-npm@5.0.0 --output-format JSON --output-file compliance/sbom/modelcommons.cdx.json",
+    "packages:pack-preview": "node scripts/pack-local-packages.cjs --preview",
+    "packages:verify-preview": "node scripts/verify-package-artifacts.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -71,6 +73,7 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "tar": "7.5.22",
     "typescript": "~5.9.2",
     "vitest": "^3.2.4"
   },

@@ -1,8 +1,18 @@
 {
   "name": "@modelcommons/device-profile",
   "version": "0.1.0",
+  "private": true,
   "description": "Pure device compatibility and runtime profile resolver for ModelCommons.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uvasolutions-sp-z-oo/ModelCommons.git",
+    "directory": "packages/device-profile"
+  },
+  "homepage": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/tree/HEAD/packages/device-profile",
+  "bugs": {
+    "url": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/issues"
+  },
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

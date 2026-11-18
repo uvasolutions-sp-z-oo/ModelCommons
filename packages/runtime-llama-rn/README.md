@@ -2,7 +2,7 @@
 
 Optional ModelCommons runtime adapter pinned to `llama.rn` 0.12.9 (embedded llama.cpp build b10256).
 
-The owner-verified [iOS Files milestone](../../docs/verification/ios-shared-models.md)
+The owner-verified [iOS Files milestone](https://github.com/uvasolutions-sp-z-oo/ModelCommons/blob/HEAD/docs/verification/ios-shared-models.md)
 uses this runtime in the consuming application. Android package `0.2.0` adds the
 `modelcommons-android-fd-v2` descriptor path; physical two-app acceptance is
 still pending.

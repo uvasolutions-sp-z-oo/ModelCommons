@@ -1,164 +1,191 @@
 #!/usr/bin/env node
-// OWNER-RUN ONLY: compiles packages, then packs their full dependency closure.
-// Does not install, publish, commit, fetch models, or invoke native builds.
+const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
 const ts = require('typescript');
-const root = path.resolve(__dirname, '..');
-const destinations = process.argv.slice(2);
-if (destinations.length !== 1) throw new Error('Usage: node scripts/pack-local-packages.cjs <consumer/vendor/modelcommons>');
-const destination = path.resolve(destinations[0]);
-if (path.basename(destination) !== 'modelcommons' || path.basename(path.dirname(destination)) !== 'vendor') {
-  throw new Error('Destination must be an explicit vendor/modelcommons directory.');
+const {
+  archiveName, core, isWithin, native, npm, packageInputs, previewVersions,
+  publicRegistry, root, sha256, sourceHash, tag, temporaryDirectory,
+  workspacePackages, writeJson,
+} = require('./package-artifacts.cjs');
+
+const args = process.argv.slice(2);
+const preview = args[0] === '--preview';
+if (preview) args.shift();
+assert.equal(args.length, 1, 'Supply a preview output directory or a local vendor/modelcommons directory.');
+const destination = path.resolve(args[0]);
+if (!preview) {
+  assert.equal(path.basename(destination), 'modelcommons', 'Local destination must end in vendor/modelcommons.');
+  assert.equal(path.basename(path.dirname(destination)), 'vendor', 'Local destination must end in vendor/modelcommons.');
 }
-const packages = ['protocol', 'client', 'model-store', 'device-profile', 'runtime-llama-rn',
-  'provider-openai', 'provider-anthropic', 'embedded'].map((name) => `packages/${name}`)
-  .concat('modules/model-commons-native');
-const temporary = fs.mkdtempSync(path.join(root, '.modelcommons-pack-'));
-const output = path.join(temporary, 'compiled');
+
+const packages = workspacePackages().filter(({ manifest }) => !preview || core.includes(manifest.name));
 const paths = {};
-const sourceFiles = [];
-function walk(directory) {
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const file = path.join(directory, entry.name);
-    if (entry.isDirectory() && !entry.name.startsWith('__')) walk(file);
-    else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) sourceFiles.push(file);
+const sources = new Map();
+for (const { directory, manifest } of packages) {
+  assert.equal(manifest.private, true, `${manifest.name}: protect the workspace source manifest`);
+  const files = packageInputs(directory, false);
+  sources.set(directory, files.map((file) => path.join(root, directory, file)));
+  for (const [key, value] of Object.entries(manifest.exports)) {
+    if (value.startsWith('./src/')) {
+      paths[manifest.name + key.slice(1)] = [`${directory}/${value.slice(2)}`];
+    }
   }
 }
-for (const directory of packages) {
-  const manifest = JSON.parse(fs.readFileSync(path.join(root, directory, 'package.json'), 'utf8'));
-  paths[manifest.name] = [`${directory}/src/index.ts`];
-  paths[`${manifest.name}/*`] = [`${directory}/src/*`];
-  walk(path.join(root, directory, 'src'));
+
+function compile(output) {
+  const options = {
+    target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS,
+    moduleResolution: ts.ModuleResolutionKind.Node10, declaration: true,
+    strict: true, skipLibCheck: true, esModuleInterop: true, newLine: ts.NewLineKind.LineFeed,
+    baseUrl: root, paths, rootDir: root, outDir: output, noEmitOnError: true,
+    types: [], lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
+  };
+
+  for (const { directory, manifest } of packages) {
+    const inputs = new Set(sources.get(directory));
+    for (const file of inputs) {
+      const info = ts.preProcessFile(fs.readFileSync(file, 'utf8'), true, true);
+      for (const { fileName: specifier } of [...info.importedFiles, ...info.referencedFiles, ...info.typeReferenceDirectives]) {
+        if (specifier.startsWith('.')) {
+          const resolved = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule?.resolvedFileName;
+          assert.ok(resolved && inputs.has(path.normalize(resolved)), `${file}: import outside packaged source: ${specifier}`);
+        } else {
+          const name = specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/');
+          assert.ok(manifest.dependencies?.[name] || manifest.peerDependencies?.[name],
+            `${file}: undeclared dependency: ${specifier}`);
+          if (name.startsWith('@modelcommons/')) {
+            assert.ok(paths[specifier], `${file}: unavailable workspace export: ${specifier}`);
+          }
+        }
+      }
+    }
+  }
+
+  const inputFiles = [...sources.values()].flat();
+  const program = ts.createProgram(inputFiles, options);
+  const allowed = new Set(inputFiles);
+  for (const file of program.getSourceFiles()) {
+    const absolute = path.normalize(file.fileName);
+    assert.ok(allowed.has(absolute) || isWithin(path.join(root, 'node_modules'), absolute),
+      `Package build reached outside its inputs: ${file.fileName}`);
+  }
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  if (diagnostics.length) {
+    throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+      getCanonicalFileName: (name) => name, getCurrentDirectory: () => root, getNewLine: () => '\n',
+    }));
+  }
+  assert.equal(program.emit().emitSkipped, false, 'Package compilation did not emit output.');
+  return program;
 }
-const program = ts.createProgram(sourceFiles, {
-  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS,
-  moduleResolution: ts.ModuleResolutionKind.Node10, declaration: true,
-  strict: true, skipLibCheck: true, esModuleInterop: true,
-  baseUrl: root, paths, rootDir: root, outDir: output, noEmitOnError: true,
-  types: ['node'], lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
-});
-const diagnostics = ts.getPreEmitDiagnostics(program);
-if (diagnostics.some((item) => item.category === ts.DiagnosticCategory.Error)) {
-  process.stderr.write(ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-    getCanonicalFileName: (name) => name, getCurrentDirectory: () => root, getNewLine: () => '\n',
-  }));
-  process.exitCode = 1;
-} else {
-  const result = program.emit();
-  if (result.emitSkipped) throw new Error('Package compilation did not emit output.');
+
+function previewEntry(program, source, stage, compiled) {
+  const checker = program.getTypeChecker();
+  const moduleSymbol = checker.getSymbolAtLocation(program.getSourceFile(source));
+  const names = checker.getExportsOfModule(moduleSymbol).filter((symbol) => {
+    const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    return target.flags & ts.SymbolFlags.Value;
+  }).map((symbol) => symbol.name).sort();
+  const cjs = './' + path.basename(compiled);
+  const esm = compiled.replace(/\.js$/, '.mjs');
+  // Both loaders use the same instance, including classes shared with protocol.
+  const wrapper = [`import api from ${JSON.stringify(cjs)};`];
+  for (const name of names) {
+    assert.match(name, /^[A-Za-z_$][\w$]*$/u);
+    assert.notEqual(name, 'default', 'Handle a default export explicitly before changing the public API.');
+    wrapper.push(`export const ${name} = api.${name};`);
+  }
+  fs.writeFileSync(path.join(stage, esm), wrapper.join('\n') + '\n');
+  const esmTypes = esm.replace(/\.mjs$/, '.d.mts');
+  fs.writeFileSync(path.join(stage, esmTypes), `export * from ${JSON.stringify(cjs)};\n`);
+  return {
+    import: { types: esmTypes, default: esm },
+    require: { types: compiled.replace(/\.js$/, '.d.ts'), default: compiled },
+    default: compiled,
+  };
+}
+
+function stagePackage({ directory, manifest }, temp, output, program) {
+  const source = path.join(root, directory);
+  const { name } = manifest;
+  const isNative = name === native;
+  const stage = path.join(temp, name.slice(1).replace('/', '-'));
+  fs.mkdirSync(stage);
+  fs.cpSync(path.join(output, directory, 'src'), path.join(stage, 'dist'), { recursive: true });
+  const inputs = packageInputs(directory, isNative);
+  if (!preview) {
+    for (const file of inputs) {
+      fs.mkdirSync(path.dirname(path.join(stage, file)), { recursive: true });
+      fs.copyFileSync(path.join(source, file), path.join(stage, file));
+    }
+  }
+  for (const [file, from] of [['LICENSE', root], ['README.md', source]]) {
+    const content = fs.readFileSync(path.join(from, file));
+    fs.writeFileSync(path.join(stage, file), preview ? content.toString('utf8').replace(/\r\n/g, '\n') : content);
+  }
+
+  const exports = {};
+  for (const [key, value] of Object.entries(manifest.exports)) {
+    if (value.startsWith('./src/')) {
+      const compiled = value.replace('./src/', './dist/').replace(/\.ts$/, '.js');
+      exports[key] = preview
+        ? previewEntry(program, path.resolve(source, value), stage, compiled)
+        : { types: compiled.replace(/\.js$/, '.d.ts'), ...(isNative ? { 'react-native': value } : {}), default: compiled };
+    } else {
+      exports[key] = value;
+    }
+  }
+  const packed = {
+    ...manifest,
+    type: 'commonjs',
+    main: './dist/index.js',
+    types: './dist/index.d.ts',
+    exports,
+    files: ['dist', 'LICENSE', 'README.md', ...(!preview ? ['src'] : []),
+      ...(isNative ? ['android', 'ios', 'scripts', 'app.plugin.js', 'expo-module.config.json', 'ModelCommonsNative.podspec'] : [])],
+  };
+  if (preview) {
+    delete packed.private;
+    packed.version = previewVersions[name];
+    packed.engines = { node: '>=20.19.0' };
+    packed.publishConfig = { access: 'public', registry: publicRegistry, tag };
+    for (const [dependency, version] of Object.entries(packed.dependencies ?? {})) {
+      assert.ok(previewVersions[dependency], `${name}: preview dependency has no release version: ${dependency}`);
+      assert.equal(version, packages.find((item) => item.manifest.name === dependency).manifest.version,
+        `${name}: review the source dependency before translating it to a preview version`);
+    }
+    if (packed.dependencies) {
+      packed.dependencies = Object.fromEntries(Object.keys(packed.dependencies).map((dependency) => [dependency, previewVersions[dependency]]));
+    }
+  }
+  writeJson(path.join(stage, 'package.json'), packed);
+
+  const filename = archiveName(name, packed.version);
+  npm(['pack', '--offline', '--ignore-scripts', '--json', '--cache', path.join(temp, 'npm-cache'),
+    '--pack-destination', temp], stage, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+  const artifact = path.join(temp, filename);
+  const info = fs.lstatSync(artifact);
+  assert.ok(info.isFile() && info.size > 0, `Missing archive: ${filename}`);
+  return {
+    name, version: packed.version, filename, sha256: sha256(fs.readFileSync(artifact)),
+    sourceSha256: sourceHash(directory, inputs, preview),
+  };
+}
+
+const work = temporaryDirectory('pack');
+try {
+  const output = path.join(work.directory, 'compiled');
+  const program = compile(output);
+  const records = packages.map((item) => stagePackage(item, work.directory, output, program));
   fs.mkdirSync(destination, { recursive: true });
-  const provenance = { schema: 1, generatedAt: new Date().toISOString(), packages: [] };
-  for (const directory of packages) {
-    const source = path.join(root, directory);
-    const manifest = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
-    const stage = path.join(temporary, manifest.name.replace('@', '').replace('/', '-'));
-    fs.mkdirSync(stage);
-    fs.cpSync(path.join(output, directory, 'src'), path.join(stage, 'dist'), { recursive: true });
-    fs.cpSync(path.join(source, 'src'), path.join(stage, 'src'), {
-      recursive: true,
-      filter: (file) => !file.includes('__tests__') && !file.endsWith('.test.ts')
-    });
-    const native = manifest.name === '@modelcommons/native';
-    if (native) {
-      for (const item of ['android', 'ios', 'scripts', 'app.plugin.js', 'expo-module.config.json', 'ModelCommonsNative.podspec']) {
-        fs.cpSync(path.join(source, item), path.join(stage, item), {
-          recursive: true,
-          filter: (file) => !file.split(path.sep).some((part) => ['build', '.cxx', '.gradle', 'test'].includes(part))
-        });
-      }
-    }
-    fs.copyFileSync(path.join(root, 'LICENSE'), path.join(stage, 'LICENSE'));
-    if (fs.existsSync(path.join(source, 'README.md'))) fs.copyFileSync(path.join(source, 'README.md'), path.join(stage, 'README.md'));
-    const exports = {};
-    for (const [key, value] of Object.entries(manifest.exports || { '.': './src/index.ts' })) {
-      if (typeof value === 'string' && value.startsWith('./src/')) {
-        const compiled = value.replace('./src/', './dist/').replace(/\.ts$/, '.js');
-        exports[key] = {
-          types: compiled.replace(/\.js$/, '.d.ts'),
-          ...(native ? { 'react-native': value } : {}), default: compiled
-        };
-      } else exports[key] = value;
-    }
-    const packed = {
-      ...manifest, type: 'commonjs', main: './dist/index.js', types: './dist/index.d.ts',
-      exports, files: ['dist', 'src', 'LICENSE', 'README.md', ...(native ? ['android', 'ios', 'scripts', 'app.plugin.js', 'expo-module.config.json', 'ModelCommonsNative.podspec'] : [])]
-    };
-    fs.writeFileSync(path.join(stage, 'package.json'), JSON.stringify(packed, null, 2) + '\n');
-    const npmCli = process.env.npm_execpath;
-    if (!npmCli || !fs.existsSync(npmCli)) throw new Error('Run this script with npm run packages:pack-local -- <destination>.');
-    const packedOutput = execFileSync(process.execPath, [npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', destination],
-      { cwd: stage, encoding: 'utf8' });
-    const parsedPackOutput = JSON.parse(packedOutput);
-
-    // Older npm: an array of package records.
-    // npm 12: an object keyed by package name.
-    // Normalize both formats, then validate the expected single package.
-    const packRecords = Array.isArray(parsedPackOutput)
-      ? parsedPackOutput
-      : parsedPackOutput !== null && typeof parsedPackOutput === 'object'
-        ? Object.values(parsedPackOutput)
-        : [];
-
-    if (packRecords.length !== 1) {
-      throw new Error(
-        `Expected exactly one npm pack result for ${manifest.name}, ` +
-        `received ${packRecords.length}. ` +
-        `Output: ${packedOutput.slice(0, 2000)}`
-      );
-    }
-
-    const record = packRecords[0];
-
-    if (
-      !record ||
-      typeof record !== 'object' ||
-      record.name !== manifest.name ||
-      record.version !== manifest.version ||
-      typeof record.filename !== 'string' ||
-      !record.filename.endsWith('.tgz') ||
-      /[\\/:\u0000-\u001f]/.test(record.filename)
-    ) {
-      throw new Error(
-        `Invalid npm pack result for ${manifest.name}@${manifest.version}. ` +
-        `Output: ${packedOutput.slice(0, 2000)}`
-      );
-    }
-
-    const artifact = path.join(destination, record.filename);
-
-    if (!fs.existsSync(artifact)) {
-      throw new Error(`npm pack reported an archive that does not exist: ${artifact}`);
-    }
-
-    const artifactInfo = fs.lstatSync(artifact);
-
-    if (!artifactInfo.isFile() || artifactInfo.size === 0) {
-      throw new Error(`npm pack did not produce a non-empty regular file: ${artifact}`);
-    }
-    const sourceHash = crypto.createHash('sha256');
-    const sourceInputs = [];
-    function collect(directory) {
-      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        const file = path.join(directory, entry.name);
-        if (entry.isDirectory()) collect(file);
-        else if (entry.isFile()) sourceInputs.push(file);
-      }
-    }
-    collect(path.join(stage, 'src'));
-    if (native) for (const name of ['android', 'ios', 'scripts']) collect(path.join(stage, name));
-    if (native) for (const name of ['app.plugin.js', 'expo-module.config.json', 'ModelCommonsNative.podspec']) sourceInputs.push(path.join(stage, name));
-    sourceHash.update('original-package.json\0').update(fs.readFileSync(path.join(source, 'package.json')));
-    for (const file of sourceInputs.sort()) {
-      sourceHash.update(path.relative(stage, file).split(path.sep).join('/') + '\0').update(fs.readFileSync(file));
-    }
-    provenance.packages.push({
-      name: manifest.name, version: manifest.version, filename: record.filename,
-      sha256: crypto.createHash('sha256').update(fs.readFileSync(artifact)).digest('hex'), sourceSha256: sourceHash.digest('hex')
-    });
+  for (const { filename } of records) {
+    fs.copyFileSync(path.join(work.directory, filename), path.join(destination, filename));
   }
-  fs.writeFileSync(path.join(destination, 'provenance.json'), JSON.stringify(provenance, null, 2) + '\n');
-  process.stdout.write(`Packed ${packages.length} packages into ${destination}\nTemporary build retained for inspection: ${temporary}\n`);
+  writeJson(path.join(destination, 'provenance.json'), {
+    schema: 1, generatedAt: new Date().toISOString(), packages: records,
+  });
+  console.log(`Packed ${records.length} ${preview ? 'preview' : 'local'} packages into ${destination}`);
+} finally {
+  work.remove();
 }

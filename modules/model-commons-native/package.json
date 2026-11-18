@@ -1,8 +1,18 @@
 {
   "name": "@modelcommons/native",
   "version": "0.2.0",
+  "private": true,
   "description": "Optional Expo native transport and shared-model connector for ModelCommons.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uvasolutions-sp-z-oo/ModelCommons.git",
+    "directory": "modules/model-commons-native"
+  },
+  "homepage": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/tree/HEAD/modules/model-commons-native",
+  "bugs": {
+    "url": "https://github.com/uvasolutions-sp-z-oo/ModelCommons/issues"
+  },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -24,7 +34,13 @@
   "peerDependencies": {
     "expo": ">=54.0.0 <55.0.0",
     "expo-modules-core": ">=3.0.0 <4.0.0",
+    "llama.rn": "0.12.9",
     "react-native": ">=0.81.0 <0.82.0"
+  },
+  "peerDependenciesMeta": {
+    "llama.rn": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@modelcommons/client": "0.1.0",
